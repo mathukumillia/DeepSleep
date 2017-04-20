@@ -27,42 +27,32 @@ double predictRating(int user, int movie)
 
 double error ()
 {
-  // read in the training data and train on each input
+
   fstream inputFile ("../um/all.dta");
+  fstream indexFile ("../um/all.idx");
   double inputs [4] = {};
-  double temp;
-  int num = 0;
+
+  //  counter keeps track of the number of points we've been through
   int counter = 0;
   double error = 0;
   double diff;
-  if (inputFile.is_open())
+  string index;
+  if (inputFile.is_open() && indexFile.is_open())
   {
-    while (inputFile >> temp)
+    while (inputFile >> inputs[0] >> inputs[1] >> inputs[2] >> inputs[3])
     {
-      // the while loop reads in number by number
-      // so we store each point as it passes through the program
-      // in inputs
-      inputs[num] = temp;
-      if (num % 3 == 0 && num != 0)
+      getline(indexFile, index);
+      if (atoi(index.c_str()) == 1)
       {
-        // if we have a full point in inputs and the point is part of the
-        // validation set, validate the SVD with it
-        if (inputs[3] == 2)
-        {
-          cout << "Getting error for point " << counter << "\n";
-          diff = inputs[2] - predictRating(inputs[0], inputs[1]);
-          error += diff * diff;
-        }
-        num = 0;
-      }
-      else
-      {
-        num++;
+        cout << "Getting error for point " << counter << "\n";
+        diff = inputs[2] - predictRating(inputs[0], inputs[1]);
+        error += diff * diff;
       }
       counter++;
     }
   }
   inputFile.close();
+  indexFile.close();
   return error;
 }
 
@@ -115,39 +105,27 @@ void runEpoch ()
 {
   // read in the training data and train on each input
   fstream inputFile ("../um/all.dta");
+  fstream indexFile ("../um/all.idx");
   double inputs [4] = {};
 
   //  counter keeps track of the number of points we've been through
   int counter = 0;
-  double temp;
-  int num = 0;
-  if (inputFile.is_open())
+  string index;
+  if (inputFile.is_open() && indexFile.is_open())
   {
-    while (inputFile >> temp)
+    while (inputFile >> inputs[0] >> inputs[1] >> inputs[2] >> inputs[3])
     {
-      // the while loop reads in number by number
-      // so we store each point as it passes through the program
-      // in inputs
-      inputs[num] = temp;
-      if (num % 3 == 0 && num != 0)
+      getline(indexFile, index);
+      if (atoi(index.c_str()) == 1)
       {
-        // if we have a full point in inputs and the point is part of the
-        // training set, train the SVD with it
-        if (inputs[3] == 1)
-        {
-         train(inputs[0], inputs[1], inputs[2]);
-         cout << "Processing point " << counter << "\n";
-        }
-        num = 0;
-      }
-      else
-      {
-        num++;
+        cout << "Processing point " << counter << "\n";
+        train(inputs[0], inputs[1], inputs[3]);
       }
       counter++;
     }
   }
   inputFile.close();
+  indexFile.close();
 }
 
 // Opens the file and runs the SVD
