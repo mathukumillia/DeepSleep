@@ -2,6 +2,7 @@
 #include<fstream>
 #include<string>
 #include<numeric>
+#include<math.h>
 using namespace std;
 
 // these are all the global variables used by the program
@@ -26,26 +27,19 @@ double *indexes;
 
 void readRatingsIndexes()
 {
-  cout << "inside readRatingsIndexes" << "\n";
-  // create arrays 
-  ratings = new double* [((int) numPts)];
-  for(int i = 0; i < numPts; i++) 
-  {
-      ratings[i] = new double [4];
-  }
-
-  indexes = new double [((int) numPts)];
+  cout << "Reading in the training data." << "\n";
 
   // read in data
-  fstream ratingsFile ("../../Caltech/CS156B/um/all.dta");
-  fstream indexFile ("../../Caltech/CS156B/um/all.idx");
+  // change file paths as necessary
+  fstream ratingsFile ("../um/all.dta");
+  fstream indexFile ("../um/all.idx");
   // user, movie, date, rating
   double inputs [4] = {};
   int index;
-  int pt = 0; 
+  int pt = 0;
 
   if (ratingsFile.is_open() && indexFile.is_open()) {
-    cout << "files open" << "\n"; 
+    cout << "Files are open in readRatingsIndexes.\n" << "\n";
     while (ratingsFile >> inputs[0] >> inputs[1] >> inputs[2] >> inputs[3]) {
         indexFile >> index;
         indexes[pt] = index;
@@ -59,16 +53,8 @@ void readRatingsIndexes()
         ratings[pt][2] = date;
         ratings[pt][3] = rating;
 
+        // increment pt so that we update the values for a new point next time
         pt += 1;
-
-        if(pt < 4) {
-          cout << user << " ";
-          cout << movie << " ";
-          cout << date << " ";
-          cout << rating << " ";
-          cout << "\n";
-        }
-        
     }
   }
 
@@ -77,7 +63,7 @@ void readRatingsIndexes()
   indexFile.close();
 }
 
-// given a user and a movie this function gives the predicted rating 
+// given a user and a movie this function gives the predicted rating
 double predictRating(int user, int movie)
 {
   double rating = 0;
@@ -92,42 +78,24 @@ double predictRating(int user, int movie)
 double error ()
 {
   cout << "Calculating Validation error..." << "\n";
-  /*fstream inputFile ("../um/all.dta");
-  fstream indexFile ("../um/all.idx");
-  double inputs [4] = {};*/
 
   //  counter keeps track of the number of points we've been through
   int counter = 0;
   double error = 0;
   double diff;
   double index;
-  /*if (inputFile.is_open() && indexFile.is_open())
-  {
-    while (inputFile >> inputs[0] >> inputs[1] >> inputs[2] >> inputs[3])
-    {
-      indexFile >> index;
-      if (index == 2)
-      {
-        diff = inputs[2] - predictRating(inputs[0], inputs[1]);
-        error += diff * diff;
-      }
-      counter++;
-    }
-  }
-  inputFile.close();
-  indexFile.close();*/
 
   for (int i = 0; i < numPts; i++) {
       index = indexes[i];
 
       if (index == 2) {
-          diff = ratings[i][2] - predictRating(ratings[i][0], ratings[i][1]);
+          diff = ratings[i][3] - predictRating(ratings[i][0], ratings[i][1]);
       }
-
+      error += diff * diff;
       counter++;
   }
 
-  return error;
+  return sqrt(error);
 }
 
 void train(int user, int movie, int rating)
@@ -145,6 +113,7 @@ void train(int user, int movie, int rating)
 
 void initialize()
 {
+  cout << "Initializing the program.\n";
   // allocate and initialize the userValues and movieValues matrices
   // all of the +1 terms result from the fact that these arrays are 1
   // indexed in the data
@@ -167,6 +136,15 @@ void initialize()
       movieValues[i][j] = 0.1;
     }
   }
+ cout << "Allocating ratings array\n";
+  // create  the arrays that store the ratings input data and the indexes
+  ratings = new double* [((int) numPts)];
+  for(int i = 0; i < numPts; i++)
+  {
+      ratings[i] = new double [4];
+  }
+  cout << "Done Allocating ratings array\n";
+  indexes = new double [((int) numPts)];
 }
 
 void cleanUp()
@@ -183,7 +161,7 @@ void cleanUp()
   }
   delete [] movieValues;
 
-  for (int i = 0; i < numUsers; i++) {
+  for (int i = 0; i < numPts; i++) {
     delete[] ratings[i];
   }
   delete[] ratings;
@@ -194,35 +172,6 @@ void cleanUp()
 void runEpoch ()
 {
   cout << "Running Epoch..." << "\n";
-  // read in the training data and train on each input
-  /*fstream inputFile ("../um/all.dta");
-  fstream indexFile ("../um/all.idx");
-  double inputs [4] = {};
-
-  //  counter keeps track of the number of points we've been through
-  int counter = 0;
-  double index;
-  if (inputFile.is_open() && indexFile.is_open())
-  {
-    while (inputFile >> inputs[0] >> inputs[1] >> inputs[2] >> inputs[3])
-    {
-      indexFile >> index;
-      // if the point in question is part of the training set, train on it
-      if (index == 1)
-      {
-        train(inputs[0], inputs[1], inputs[3]);
-      }
-      counter++;
-      // print the counter every 1000000 points; I don't print every point
-      // because that slows it down
-      if (counter % 1000000 == 0)
-      {
-        cout << counter << "\n";
-      }
-    }
-  }
-  inputFile.close();
-  indexFile.close();*/
 
   int counter = 0;
 
@@ -246,8 +195,8 @@ void runEpoch ()
 // Opens the file and runs the SVD
 int main()
 {
-  readRatingsIndexes();
   initialize();
+  readRatingsIndexes();
   // gets the initial validation error
   // NOTE: the initial error should calculate the error in the final program
   double initialError = 1;
