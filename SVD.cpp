@@ -190,13 +190,13 @@ int main()
   // gets the initial validation error
   // NOTE: the initial error should calculate the error in the final program
   double initialError = error();
-  double finalError = 10;
+  double finalError = 0;
   int counter = 0;
   cout << "Initial Error is: " << initialError << "\n";
-  while (initialError - finalError > 0.01 && counter < 5) {
+  while (initialError - finalError > 0.01) {
     cout << "Starting Epoch " << counter << "\n";
     counter++;
-    initialError = finalError;
+    finalError = initialError;
     runEpoch();
     finalError = error();
     cout << "Error after Epoch " << finalError << "\n";
