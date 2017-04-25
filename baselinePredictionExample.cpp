@@ -11,9 +11,9 @@ using namespace std;
 int main() {
 
   // choose random user, movie, and time 
-  int user = 18767;
-  int movie = 9869;
-  int time = 1876;
+  int user = 1;
+  int movie = 79;
+  int time = 1123;
 
   // calculate baseline prediction from user, movie, and time
   double prediction = baselinePrediction(user,movie,time);
