@@ -82,7 +82,7 @@ double error ()
   //  counter keeps track of the number of points we've been through
   int counter = 0;
   double error = 0;
-  double diff;
+  double diff = 0;
   double index;
 
   for (int i = 0; i < numPts; i++) {
