@@ -9,16 +9,75 @@ using namespace std;
 // users and movies are one indexed
 const double numUsers = 458293;
 const double numMovies = 17770;
+const double numPts = 102416306;
 
 // K is the constant representing the number of features
 // lrate is the learning rate
 const double K = 5;
 const double lrate = 0.001;
 
+// these 2D arrays are the U and V in the SVD
 double **userValues;
 double **movieValues;
 
+// 2D arrays to store ratings and indexes
+double **ratings;
+double *indexes;
 
+void readRatingsIndexes()
+{
+  cout << "inside readRatingsIndexes" << "\n";
+  // create arrays 
+  ratings = new double* [((int) numPts)];
+  for(int i = 0; i < numPts; i++) 
+  {
+      ratings[i] = new double [4];
+  }
+
+  indexes = new double [((int) numPts)];
+
+  // read in data
+  fstream ratingsFile ("../../Caltech/CS156B/um/all.dta");
+  fstream indexFile ("../../Caltech/CS156B/um/all.idx");
+  // user, movie, date, rating
+  double inputs [4] = {};
+  int index;
+  int pt = 0; 
+
+  if (ratingsFile.is_open() && indexFile.is_open()) {
+    cout << "files open" << "\n"; 
+    while (ratingsFile >> inputs[0] >> inputs[1] >> inputs[2] >> inputs[3]) {
+        indexFile >> index;
+        indexes[pt] = index;
+
+        double user = inputs[0];
+        double movie = inputs[1];
+        double date = inputs[2];
+        double rating = inputs[3];
+        ratings[pt][0] = user;
+        ratings[pt][1] = movie;
+        ratings[pt][2] = date;
+        ratings[pt][3] = rating;
+
+        pt += 1;
+
+        if(pt < 4) {
+          cout << user << " ";
+          cout << movie << " ";
+          cout << date << " ";
+          cout << rating << " ";
+          cout << "\n";
+        }
+        
+    }
+  }
+
+
+  ratingsFile.close();
+  indexFile.close();
+}
+
+// given a user and a movie this function gives the predicted rating 
 double predictRating(int user, int movie)
 {
   double rating = 0;
@@ -33,16 +92,16 @@ double predictRating(int user, int movie)
 double error ()
 {
   cout << "Calculating Validation error..." << "\n";
-  fstream inputFile ("../um/all.dta");
+  /*fstream inputFile ("../um/all.dta");
   fstream indexFile ("../um/all.idx");
-  double inputs [4] = {};
+  double inputs [4] = {};*/
 
   //  counter keeps track of the number of points we've been through
   int counter = 0;
   double error = 0;
   double diff;
   double index;
-  if (inputFile.is_open() && indexFile.is_open())
+  /*if (inputFile.is_open() && indexFile.is_open())
   {
     while (inputFile >> inputs[0] >> inputs[1] >> inputs[2] >> inputs[3])
     {
@@ -56,7 +115,18 @@ double error ()
     }
   }
   inputFile.close();
-  indexFile.close();
+  indexFile.close();*/
+
+  for (int i = 0; i < numPts; i++) {
+      index = indexes[i];
+
+      if (index == 2) {
+          diff = ratings[i][2] - predictRating(ratings[i][0], ratings[i][1]);
+      }
+
+      counter++;
+  }
+
   return error;
 }
 
@@ -112,13 +182,20 @@ void cleanUp()
     delete [] movieValues[i];
   }
   delete [] movieValues;
+
+  for (int i = 0; i < numUsers; i++) {
+    delete[] ratings[i];
+  }
+  delete[] ratings;
+
+  delete[] indexes;
 }
 
 void runEpoch ()
 {
   cout << "Running Epoch..." << "\n";
   // read in the training data and train on each input
-  fstream inputFile ("../um/all.dta");
+  /*fstream inputFile ("../um/all.dta");
   fstream indexFile ("../um/all.idx");
   double inputs [4] = {};
 
@@ -145,12 +222,31 @@ void runEpoch ()
     }
   }
   inputFile.close();
-  indexFile.close();
+  indexFile.close();*/
+
+  int counter = 0;
+
+  for (int i = 0; i < numPts; i++) {
+      int index = indexes[i];
+
+      if (index == 1) {
+          train(ratings[i][0], ratings[i][1], ratings[i][3]);
+      }
+
+      counter++;
+      // print the counter every 1000000 points; I don't print every point
+      // because that slows it down
+      if (counter % 1000000 == 0)
+      {
+        cout << counter << "\n";
+      }
+  }
 }
 
 // Opens the file and runs the SVD
 int main()
 {
+  readRatingsIndexes();
   initialize();
   // gets the initial validation error
   // NOTE: the initial error should calculate the error in the final program
