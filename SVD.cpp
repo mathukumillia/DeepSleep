@@ -28,7 +28,7 @@ double *indexes;
 void readRatingsIndexes()
 {
   cout << "Reading in the training data." << "\n";
-
+  cout << "Note to user: Make sure the input file paths are correct.\n";
   // read in data
   // change file paths as necessary
   fstream ratingsFile ("../um/all.dta");
@@ -39,7 +39,6 @@ void readRatingsIndexes()
   int pt = 0;
 
   if (ratingsFile.is_open() && indexFile.is_open()) {
-    cout << "Files are open in readRatingsIndexes.\n" << "\n";
     while (ratingsFile >> inputs[0] >> inputs[1] >> inputs[2] >> inputs[3]) {
         indexFile >> index;
         indexes[pt] = index;
@@ -95,7 +94,7 @@ double error ()
       counter++;
   }
 
-  return sqrt(error);
+  return sqrt(error/numPts);
 }
 
 void train(int user, int movie, int rating)
@@ -136,19 +135,20 @@ void initialize()
       movieValues[i][j] = 0.1;
     }
   }
- cout << "Allocating ratings array\n";
   // create  the arrays that store the ratings input data and the indexes
   ratings = new double* [((int) numPts)];
   for(int i = 0; i < numPts; i++)
   {
       ratings[i] = new double [4];
   }
-  cout << "Done Allocating ratings array\n";
+
   indexes = new double [((int) numPts)];
+  cout << "Done allocating memory.\n";
 }
 
 void cleanUp()
 {
+  cout << "Cleaning up\n" << "\n";
   // de-allocate user values and movie values to prevent memory leak
   for (int i = 0; i < numUsers + 1; i++)
   {
@@ -172,24 +172,14 @@ void cleanUp()
 void runEpoch ()
 {
   cout << "Running Epoch..." << "\n";
-
-  int counter = 0;
-
   for (int i = 0; i < numPts; i++) {
       int index = indexes[i];
 
       if (index == 1) {
           train(ratings[i][0], ratings[i][1], ratings[i][3]);
       }
-
-      counter++;
-      // print the counter every 1000000 points; I don't print every point
-      // because that slows it down
-      if (counter % 1000000 == 0)
-      {
-        cout << counter << "\n";
-      }
   }
+  cout << "Epoch complete." << "\n";
 }
 
 // Opens the file and runs the SVD
@@ -199,18 +189,18 @@ int main()
   readRatingsIndexes();
   // gets the initial validation error
   // NOTE: the initial error should calculate the error in the final program
-  double initialError = 1;
+  double initialError = error();
   double finalError = 10;
+  int counter = 0;
   cout << "Initial Error is: " << initialError << "\n";
-  cout << "Final Error is: " << finalError << "\n";
-  // NOTE: Uncomment the while loop once we've optimized the single epoch stuff
-  // while (initialError/finalError > 0.01) {
+  while (finalError - initialError > 0.01 && counter < 5) {
+    cout << "Starting Epoch " << counter << "\n";
+    counter++;
     initialError = finalError;
     runEpoch();
     finalError = error();
-    cout << "Initial Error is: " << initialError << "\n";
-    cout << "Final Error is: " << finalError << "\n";
-  // }
+    cout << "Error after Epoch " << finalError << "\n";
+  }
   cleanUp();
   return 0;
 }
