@@ -193,7 +193,7 @@ int main()
   double finalError = 10;
   int counter = 0;
   cout << "Initial Error is: " << initialError << "\n";
-  while (finalError - initialError > 0.01 && counter < 5) {
+  while (initialError - finalError > 0.01 && counter < 5) {
     cout << "Starting Epoch " << counter << "\n";
     counter++;
     initialError = finalError;
