@@ -189,14 +189,14 @@ int main()
   readRatingsIndexes();
   // gets the initial validation error
   // NOTE: the initial error should calculate the error in the final program
-  double initialError = error();
-  double finalError = 0;
+  double initialError = 10;
+  double finalError = error();
   int counter = 0;
   cout << "Initial Error is: " << initialError << "\n";
-  while (initialError - finalError > 0.01) {
+  while (initialError - finalError > 0.0001) {
     cout << "Starting Epoch " << counter << "\n";
     counter++;
-    finalError = initialError;
+    initialError = finalError;
     runEpoch();
     finalError = error();
     cout << "Error after Epoch " << finalError << "\n";
