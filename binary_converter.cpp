@@ -97,24 +97,7 @@ int main()
 {
 	initialize();
 	read_data();
-	cout << ratings[0] << ratings[1] << ratings[2] << ratings[3] << "\n";
-	cout << indices[0] << "\n";
 	write_binary();
 	clean_up();
-
-	initialize();
-	fstream ratings_file("ratings.bin", ios::in | ios::binary);
-	ratings_file.read(reinterpret_cast<char *>(ratings), sizeof(double) * numPts * POINT_SIZE);
-	fstream indices_file("indices.bin", ios::in | ios::binary);
-	indices_file.read(reinterpret_cast<char *>(indices), sizeof(double) * numPts);
-
-	cout << ratings[0] << ratings[1] << ratings[2] << ratings[3] << "\n";
-	cout << indices[0];
-
-	indices_file.close();
-	ratings_file.close();
-	clean_up();
-
-
 	return 0;
 }
