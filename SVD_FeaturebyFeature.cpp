@@ -14,7 +14,7 @@ const double numPts = 102416306;
 
 // K is the constant representing the number of features
 // lrate is the learning rate
-const double K = 20;
+const double K = 10;
 const double lrate = 0.001;
 const double lambda = 0.02;
 
@@ -232,7 +232,7 @@ int main()
   // train one feature at a time
   for(int i = 0; i < K; i++) {
     initialError = 10;
-      while (initialError - finalError > 0.000001) {
+      while ((initialError - finalError > 0.0001) || (i < K)) {
         cout << "Feature " << i << "\n";
         cout << "Starting Epoch " << counter << "\n";
         counter++;
