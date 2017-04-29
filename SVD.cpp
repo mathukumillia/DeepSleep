@@ -14,7 +14,7 @@ const double numPts = 102416306;
 
 // K is the constant representing the number of features
 // lrate is the learning rate
-const double K = 5;
+const double K = 20;
 const double lrate = 0.001;
 
 // these 2D arrays are the U and V in the SVD
@@ -31,8 +31,8 @@ void readRatingsIndexes()
   cout << "Note to user: Make sure the input file paths are correct.\n";
   // read in data
   // change file paths as necessary
-  fstream ratingsFile ("../um/all.dta");
-  fstream indexFile ("../um/all.idx");
+  fstream ratingsFile ("../../Caltech/CS156B/um/all.dta");
+  fstream indexFile ("../../Caltech/CS156B/um/all.idx");
   // user, movie, date, rating
   double inputs [4] = {};
   int index;
@@ -83,18 +83,20 @@ double error ()
   double error = 0;
   double diff = 0;
   double index;
+  double numValidationPts;
 
   for (int i = 0; i < numPts; i++) {
       index = indexes[i];
 
       if (index == 2) {
           diff = ratings[i][3] - predictRating(ratings[i][0], ratings[i][1]);
+          error += diff * diff;
+          numValidationPts += 1;
       }
-      error += diff * diff;
       counter++;
   }
 
-  return sqrt(error/numPts);
+  return sqrt(error/numValidationPts);
 }
 
 void train(int user, int movie, int rating)
@@ -182,6 +184,28 @@ void runEpoch ()
   cout << "Epoch complete." << "\n";
 }
 
+void findQualPredictions()
+{
+  ofstream outputFile;
+  fstream qualFile ("../../Caltech/CS156B/um/qual.dta");
+  outputFile.open("output.dta");
+  double inputs [3] = {};
+
+  if (qualFile.is_open()) {
+    while (qualFile >> inputs[0] >> inputs[1] >> inputs[2]) {
+       double prediction = predictRating(inputs[0], inputs[1]);
+       if(prediction < 1){
+          prediction = 1;
+       }
+       if(prediction > 5){
+          prediction = 5;
+       }
+       outputFile << prediction << "\n";
+    }
+  }
+
+}
+
 // Opens the file and runs the SVD
 int main()
 {
@@ -201,6 +225,7 @@ int main()
     finalError = error();
     cout << "Error after Epoch " << finalError << "\n";
   }
+  findQualPredictions();
   cleanUp();
   return 0;
 }
