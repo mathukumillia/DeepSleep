@@ -279,6 +279,10 @@ void run_epoch()
 		if (index == 1) {
 			train(ratings[i * POINT_SIZE], ratings[i * POINT_SIZE + 1], ratings[i * POINT_SIZE + 2], ratings[i * POINT_SIZE + 3]);
 		}
+		if (i%1000000 == 0)
+		{
+			cout << "i: " << i << "\n";
+		}
 	}
 }
 
