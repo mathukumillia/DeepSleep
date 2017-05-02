@@ -6,8 +6,9 @@
 
 // a point looks like (user, movie, date, rating)
 #define POINT_SIZE 4 // the size of a single input point in the training data
-#define STOPPING_CONDITION 0.0001
-#define MAX_NEIGHBOR_SIZE 3341
+#define STOPPING_CONDITION 0.0001 
+#define MAX_EPOCHS 20 // the maximum number of epochs to run; 30 in the paper
+#define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
 #define GAMMA_2 0.007 // obtained from the SVD++ paper
 #define LAMBDA_7 0.015 // obtained from the SVD++ paper
 
@@ -286,6 +287,32 @@ void run_epoch()
 	}
 }
 
+/*
+* get predictions on the qual set and output them to a file
+* fix this to work with baseline removed predictions
+*
+*/
+void findQualPredictions()
+{
+  ofstream outputFile;
+  fstream qualFile ("../../Caltech/CS156B/um/qual.dta");
+  outputFile.open("output.dta");
+  double inputs [3] = {};
+
+  if (qualFile.is_open()) {
+    while (qualFile >> inputs[0] >> inputs[1] >> inputs[2]) {
+       double prediction = predictRating(inputs[0], inputs[1]);
+       if(prediction < 1){
+          prediction = 1;
+       }
+       if(prediction > 5){
+          prediction = 5;
+       }
+       outputFile << prediction << "\n";
+    }
+  }
+}
+
 int main()
 {
 	initialize();
@@ -293,16 +320,16 @@ int main()
 
 	double initialError = 10;
 	double finalError = error(2); // gets the validation error before training
-	int counter = 0;
+	int counter = 1;
 
 	cout << "The starting error is: " << finalError << "\n";
-	while (initialError - finalError > STOPPING_CONDITION) {
+	while (initialError - finalError > STOPPING_CONDITION && counter <= MAX_EPOCHS) {
 		cout << "Starting Epoch " << counter << "\n";
 		counter++;
 		initialError = finalError;
 		run_epoch();
 		finalError = error(2); // error(2) returns the validation error
-		cout << "Error after Epoch " << finalError << "\n";
+		cout << "Error after Epoch " << counter << ": " << finalError << "\n";
 	}
 
 	clean_up();
