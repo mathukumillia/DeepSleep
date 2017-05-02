@@ -85,6 +85,7 @@ int main()
   }
 
   findQualPredictions();
+  storeUserFeatures();
   cleanUp();
   return 0;
 }
@@ -287,6 +288,23 @@ void findQualPredictions()
          }
          outputFile << prediction << "\n";
       }
+    }
+}
+
+void storeUserFeatures()
+{
+    cout << "storing user features" << "\n";
+
+    ofstream featureFile;
+    featureFile.open("userFeatures.dta");
+    // file has userid followed by all K feature values
+
+    for (int user = 0; user < numUsers; user++) {
+       featureFile << user << " ";
+       for (int feature = 0; feature < K; feature++) {
+           featureFile << userValues[user][feature] << " ";
+       }
+       featureFile << "\n";
     }
 }
 
