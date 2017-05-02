@@ -16,6 +16,7 @@ const double numPts = 102416306;
 // lrate is the learning rate
 const double K = 20;
 const double lrate = 0.001;
+const double lambda = 0;
 
 // these 2D arrays are the U and V in the SVD
 double **userValues;
@@ -73,6 +74,13 @@ double predictRating(int user, int movie)
   return rating;
 }
 
+double magSquared(double* vector) {
+  double mag = 0;
+  for (int i = 0; i < K; i++) {
+     mag += vector[i] * vector[i];
+  }
+  return mag;
+}
 
 double error ()
 {
@@ -89,8 +97,12 @@ double error ()
       index = indexes[i];
 
       if (index == 2) {
-          diff = ratings[i][3] - predictRating(ratings[i][0], ratings[i][1]);
-          error += diff * diff;
+          int user = ratings[i][0];
+          int movie = ratings[i][1];
+          double rating = ratings[i][3];
+          diff = rating - predictRating(user, movie);
+
+          error += diff * diff + lambda * (magSquared(userValues[user]) + magSquared(movieValues[movie]));
           numValidationPts += 1;
       }
       counter++;
@@ -102,14 +114,13 @@ double error ()
 void train(int user, int movie, int rating, int feature)
 {
   // calculate the error with the current feature values
-	double err = lrate * ((double) rating - predictRating(user, movie));
+	double err = (double) rating - predictRating(user, movie);
 
   // updates the movie and user vectors feature by feature
   double *uv = userValues[user];
 
-  userValues[user][feature] += err * movieValues[movie][feature];
-  movieValues[movie][feature] += err * uv[feature];
-  
+  userValues[user][feature] += lrate * (err * movieValues[movie][feature] - lambda * userValues[user][feature]);
+  movieValues[movie][feature] += lrate * (err * uv[feature] - lambda * movieValues[movie][feature]);
 }
 
 void initialize()
@@ -186,6 +197,8 @@ void runEpoch (int feature)
 
 void findQualPredictions()
 {
+  cout << "Finding Qual Predictions" << "\n";
+
   ofstream outputFile;
   fstream qualFile ("../../Caltech/CS156B/um/qual.dta");
   outputFile.open("output.dta");
@@ -215,23 +228,49 @@ int main()
   // NOTE: the initial error should calculate the error in the final program
   double initialError = 10;
   double finalError = error();
-  int counter = 0;
+  int epochCounter = 0;
+  int featureEpochCounter = 0;
+
   cout << "Initial Error is: " << initialError << "\n";
+  cout << "Final Error is:" << finalError << "\n";
 
   // train one feature at a time
   for(int i = 0; i < K; i++) {
-    initialError = 1;
+    initialError = 10;
+    featureEpochCounter = 0;
       while (initialError - finalError > 0.0001) {
         cout << "Feature " << i << "\n";
-        cout << "Starting Epoch " << counter << "\n";
-        counter++;
+        cout << "Starting Epoch " << epochCounter << "\n";
+
+        epochCounter++;
+        featureEpochCounter++;
+
         initialError = finalError;
         runEpoch(i);
         finalError = error();
+
         cout << "Error after Epoch " << finalError << "\n";
      }
+     // didn't train on feature, because initialError - finalError < 0.0001 already
+     // just train for n more epochs
+     int n = 5;
+     if (featureEpochCounter <= 1) {
+        for (int j = 0; j < n; j++) {
+          cout << "Feature " << i << "\n";
+          cout << "Starting Epoch " << epochCounter << "\n";
+
+          epochCounter++;
+          featureEpochCounter++;
+
+          initialError = finalError;
+          runEpoch(i);
+          finalError = error();
+
+          cout << "Error after Epoch " << finalError << "\n";
+        }
+      }
   }
-  
+
   findQualPredictions();
   cleanUp();
   return 0;
