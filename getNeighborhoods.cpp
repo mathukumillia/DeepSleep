@@ -13,7 +13,7 @@ using namespace std;
 
 // a point looks like (user, movie, date, rating)
 #define POINT_SIZE 4 // the size of a single input point in the training data
-#define MAX_NEIGHBOR_SIZE 3341 // the largest any possible neighborhood can be
+#define MAX_NEIGHBOR_SIZE 300 // the largest any possible neighborhood can be
 
 // users and movies are one indexed
 const double num_users = 458293;
@@ -71,6 +71,7 @@ void read_data()
 *
 * Read through all of the points and assemble the neighborhoods of each
 * user
+* limits neighborhood size to 300, as dictated by paper
 */
 void assemble_neighborhoods()
 {
@@ -82,12 +83,16 @@ void assemble_neighborhoods()
 	{
 		index = indices[i];
 		// currently only assembles neighborhoods from the training set 1
+		// limit the size of the neighborhood to 300, just like the paper does
 		if (index == 1)
 		{
 			user = ratings[i * POINT_SIZE];
 			movie = ratings[i * POINT_SIZE + 1];
-			neighborhoods[(int)user * MAX_NEIGHBOR_SIZE + (int)neighborhood_sizes[(int)user]] = (int)movie;
-			neighborhood_sizes[(int)user] += 1;
+			if (neighborhood_sizes[(int)user] < MAX_NEIGHBOR_SIZE)
+			{
+				neighborhoods[(int)user * MAX_NEIGHBOR_SIZE + (int)neighborhood_sizes[(int)user]] = (int)movie;
+				neighborhood_sizes[(int)user] += 1;
+			}	
 		}
 	}
 }
