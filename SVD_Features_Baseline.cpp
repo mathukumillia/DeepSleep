@@ -3,7 +3,7 @@
 #include <string>
 #include <numeric>
 #include <math.h>
-#include "baselinePrediction"
+#include "baselinePrediction.h"
 using namespace std;
 
 // these are all the global variables used by the program
@@ -15,7 +15,7 @@ const double numPts = 102416306;
 
 // K is the constant representing the number of features
 // lrate is the learning rate
-const double K = 50;
+const double K = 30;
 const double lrate = 0.001;
 const double lambda = 0.02;
 
@@ -104,7 +104,10 @@ double error ()
           double rating = ratings[i][3];
           diff = rating - predictRating(user, movie);
 
+          //cout << "diff " << diff << "\n";
+
           error += diff * diff + lambda * (magSquared(userValues[user]) + magSquared(movieValues[movie]));
+          //cout << "error" << error << "\n";
           numValidationPts += 1;
       }
       counter++;
@@ -115,13 +118,14 @@ double error ()
 
 void train(int user, int movie, int rating, int feature)
 {
-    // calculate the error with the current feature values
-  	double err = (double) rating - predictRating(user, movie);
+    // calculate the error with the current feature values and biases
+  	double err = (double) rating -  predictRating(user, movie);
 
-    // updates the movie and user vectors feature by feature
+    // updates the movie and user vectors for given feature
     double *uv = userValues[user];
 
     userValues[user][feature] += lrate * (err * movieValues[movie][feature] - lambda * userValues[user][feature]);
+
     movieValues[movie][feature] += lrate * (err * uv[feature] - lambda * movieValues[movie][feature]);
 }
 
@@ -247,7 +251,7 @@ int main()
     for(int i = 0; i < K; i++) {
       initialError = 10;
       featureEpochCounter = 0;
-        while (initialError - finalError > 0.0001) {
+        while (initialError - finalError > 0.00001) {
           cout << "Feature " << i << "\n";
           cout << "Starting Epoch " << epochCounter << "\n";
 
