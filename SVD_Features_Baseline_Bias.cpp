@@ -15,9 +15,9 @@ const double numPts = 102416306;
 
 // K is the constant representing the number of features
 // lrate is the learning rate
-const double K = 30;
+const double K = 10;
 const double lrate = 0.001;
-const double lambda = 0.02;
+const double lambda = 0.002;
 const double global_mean = 3.6033;
 
 // these 2D arrays are the U and V in the SVD
@@ -31,64 +31,6 @@ double *indexes;
 // arrays for user and movie biases
 double *userBiases;
 double *movieBiases;
-
-// Opens the file and runs the SVD
-int main()
-{
-    initialize();
-    readRatingsIndexes();
-    // gets the initial validation error
-    // NOTE: the initial error should calculate the error in the final program
-    double initialError = 10;
-    double finalError = error();
-    int epochCounter = 0;
-    int featureEpochCounter = 0;
-
-    cout << "Initial Error is: " << initialError << "\n";
-    cout << "Final Error is:" << finalError << "\n";
-
-    // train one feature at a time
-    for(int i = 0; i < K; i++) {
-      initialError = 10;
-      featureEpochCounter = 0;
-        while (initialError - finalError > 0.00001) {
-          cout << "Feature " << i << "\n";
-          cout << "Starting Epoch " << epochCounter << "\n";
-
-          epochCounter++;
-          featureEpochCounter++;
-
-          initialError = finalError;
-          runEpoch(i);
-          finalError = error();
-
-          cout << "Error after Epoch " << finalError << "\n";
-       }
-       // didn't train on feature, because initialError - finalError < 0.0001 already
-       // just train for n more epochs
-       int n = 5;
-       if (featureEpochCounter <= 1) {
-          for (int j = 0; j < n; j++) {
-            cout << "Feature " << i << "\n";
-            cout << "Starting Epoch " << epochCounter << "\n";
-
-            epochCounter++;
-            featureEpochCounter++;
-
-            initialError = finalError;
-            runEpoch(i);
-            finalError = error();
-
-            cout << "Error after Epoch " << finalError << "\n";
-          }
-        }
-  }
-
-  findQualPredictions();
-  storeUserFeatures();
-  cleanUp();
-  return 0;
-}
 
 // creates arrays for storage
 void initialize()
@@ -125,16 +67,16 @@ void initialize()
 
       indexes = new double [((int) numPts)];
 
-      userBiases = new double [((int) numUsers)]
+      userBiases = new double [((int) numUsers)];
       for (int i = 0; i < numUsers; ++i)
       {
-          userBiases[i] = 0.1
+          userBiases[i] = 0.1;
       }
 
-      movieBiases = new double [((int numMovies))]
+      movieBiases = new double [((int) numMovies)];
       for (int i = 0; i < numMovies; ++i)
       {
-          movieBiases[i] = 0.1
+          movieBiases[i] = 0.1;
       }
 
       cout << "Done allocating memory.\n";
@@ -204,10 +146,10 @@ double error ()
 
   //  counter keeps track of the number of points we've been through
   int counter = 0;
-  double error = 0;
+  long double error = 0;
   double diff = 0;
-  double index;
-  double numValidationPts;
+  double index = 0;
+  double numValidationPts = 0;
 
   for (int i = 0; i < numPts; i++) {
       index = indexes[i];
@@ -220,14 +162,40 @@ double error ()
 
           //cout << "diff " << diff << "\n";
 
-          error += diff * diff + lambda * (magSquared(userValues[user]) + magSquared(movieValues[movie]));
-          //cout << "error" << error << "\n";
+          double errorpart1 = diff * diff;
+          long double errorpart2 = (magSquared(userValues[user]) + magSquared(movieValues[movie]) + 
+            userBiases[user] * userBiases[user] + movieBiases[movie] * movieBiases[movie]);
+
+          error += errorpart1 + lambda * errorpart2;
+
+          //cout << "error1 " << errorpart1 << "\n";
+          //cout << "error2 " << errorpart2 << "\n";
+          //cout << "error " << error << "\n";
           numValidationPts += 1;
+
+          //cout << "pt number " << numValidationPts << "\n";
       }
       counter++;
   }
 
   return sqrt(error/numValidationPts);
+}
+
+void train(int user, int movie, int rating, int feature)
+{
+    // calculate the error with the current feature values
+    double err = (double) rating - (userBiases[user] + movieBiases[movie] + predictRating(user, movie));
+
+    // updates the movie and user vectors for given feature
+    double *uv = userValues[user];
+
+    userValues[user][feature] += lrate * (err * movieValues[movie][feature] - lambda * userValues[user][feature]);
+    movieValues[movie][feature] += lrate * (err * uv[feature] - lambda * movieValues[movie][feature]);
+
+    // update biases
+    double oldUserBias = userBiases[user];
+    userBiases[user] += lrate * (err - lambda * (oldUserBias + movieBiases[movie] - global_mean));
+    movieBiases[movie] += lrate * (err - lambda * (oldUserBias + movieBiases[movie] - global_mean));
 }
 
 void runEpoch (int feature)
@@ -241,23 +209,6 @@ void runEpoch (int feature)
         }
     }
     cout << "Epoch complete." << "\n";
-}
-
-void train(int user, int movie, int rating, int feature)
-{
-    // calculate the error with the current feature values
-  	double err = (double) rating - (userBiases[user] + movieBiases[movie] + predictRating(user, movie));
-
-    // updates the movie and user vectors for given feature
-    double *uv = userValues[user];
-
-    userValues[user][feature] += lrate * (err * movieValues[movie][feature] - lambda * userValues[user][feature]);
-    movieValues[movie][feature] += lrate * (err * uv[feature] - lambda * movieValues[movie][feature]);
-
-    // update biases
-    double oldUserBias = userBiases[user]
-    userBiases[user] += lrate * (err - lambda * (oldUserBias + movieBiases[movie] - global_mean))
-    movieBiases[movie] += lrate * (err - lambda * (oldUserBias + movieBiases[movie] - global_mean))
 }
 
 void findQualPredictions()
@@ -329,4 +280,63 @@ void cleanUp()
       delete[] ratings;
 
       delete[] indexes;
+}
+
+// Opens the file and runs the SVD
+int main()
+{
+    initialize();
+    readRatingsIndexes();
+    // gets the initial validation error
+    // NOTE: the initial error should calculate the error in the final program
+    double initialError = 10;
+    double finalError = error();
+    int epochCounter = 0;
+    int featureEpochCounter = 0;
+
+    cout << "Initial Error is: " << initialError << "\n";
+    cout << "Final Error is:" << finalError << "\n";
+
+    // train one feature at a time
+    for(int i = 0; i < K; i++) {
+      initialError = 10;
+      featureEpochCounter = 0;
+        // while error is decreasing
+        while (initialError - finalError > 0) {
+          cout << "Feature " << i << "\n";
+          cout << "Starting Epoch " << epochCounter << "\n";
+
+          epochCounter++;
+          featureEpochCounter++;
+
+          initialError = finalError;
+          runEpoch(i);
+          finalError = error();
+
+          cout << "Error after Epoch " << finalError << "\n";
+       }
+       // didn't train on feature, because initialError - finalError < 0.0001 already
+       // just train for n more epochs
+       int n = 10;
+       if (featureEpochCounter <= 1) {
+          for (int j = 0; j < n; j++) {
+            cout << "Feature " << i << "\n";
+            cout << "Starting Epoch " << epochCounter << "\n";
+
+            epochCounter++;
+            featureEpochCounter++;
+
+            initialError = finalError;
+            runEpoch(i);
+            finalError = error();
+
+            cout << "Error after Epoch " << finalError << "\n";
+          }
+        }
+  }
+
+  findQualPredictions();
+  storeUserFeatures();
+  cleanUp();
+  return 0;
 }
