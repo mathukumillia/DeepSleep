@@ -17,7 +17,7 @@ const double numPts = 102416306;
 // lrate is the learning rate
 const double K = 10;
 const double lrate = 0.001;
-const double lambda = 0.002;
+const double lambda = 0.0015;
 const double global_mean = 3.6033;
 
 // these 2D arrays are the U and V in the SVD
@@ -146,7 +146,7 @@ double error ()
 
   //  counter keeps track of the number of points we've been through
   int counter = 0;
-  long double error = 0;
+  double error = 0;
   double diff = 0;
   double index = 0;
   double numValidationPts = 0;
@@ -163,7 +163,7 @@ double error ()
           //cout << "diff " << diff << "\n";
 
           double errorpart1 = diff * diff;
-          long double errorpart2 = (magSquared(userValues[user]) + magSquared(movieValues[movie]) + 
+          double errorpart2 = (magSquared(userValues[user]) + magSquared(movieValues[movie]) + 
             userBiases[user] * userBiases[user] + movieBiases[movie] * movieBiases[movie]);
 
           error += errorpart1 + lambda * errorpart2;
@@ -301,8 +301,8 @@ int main()
     for(int i = 0; i < K; i++) {
       initialError = 10;
       featureEpochCounter = 0;
-        // while error is decreasing
-        while (initialError - finalError > 0) {
+        // while error is decreasing by threshold
+        while (initialError - finalError > 0.0001) {
           cout << "Feature " << i << "\n";
           cout << "Starting Epoch " << epochCounter << "\n";
 
