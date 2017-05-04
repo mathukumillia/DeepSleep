@@ -6,8 +6,8 @@
 
 // a point looks like (user, movie, date, rating)
 #define POINT_SIZE 4 // the size of a single input point in the training data
-#define STOPPING_CONDITION 0.0001 
-#define MAX_EPOCHS 20 // the maximum number of epochs to run; 30 in the paper
+#define STOPPING_CONDITION 0
+#define MAX_EPOCHS 30 // the maximum number of epochs to run; 30 in the paper
 #define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
 #define GAMMA_2 0.007 // obtained from the SVD++ paper
 #define LAMBDA_7 0.015 // obtained from the SVD++ paper
@@ -308,7 +308,8 @@ void findQualPredictions()
         {
             user_vector_sum = get_user_vector((int)ratings[i * POINT_SIZE], (int)ratings[i * POINT_SIZE + 1]);
             // I have to add the ratings in the file because this ratings file has the baselines removed
-            prediction = ratings[i * POINT_SIZE + 3] + predict_rating((int)ratings[i * POINT_SIZE + 1], user_vector_sum);
+            // this rating is negative, so I must multiply by -1 first
+            prediction = (-1 * ratings[i * POINT_SIZE + 3]) + predict_rating((int)ratings[i * POINT_SIZE + 1], user_vector_sum);
             if (prediction < 1)
             {
                 prediction = 1;
