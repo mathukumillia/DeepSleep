@@ -67,13 +67,13 @@ void initialize()
 
       indexes = new double [((int) numPts)];
 
-      userBiases = new double [((int) numUsers)];
+      userBiases = new double [((int) numUsers + 1)];
       for (int i = 0; i < numUsers; ++i)
       {
           userBiases[i] = 0.1;
       }
 
-      movieBiases = new double [((int) numMovies)];
+      movieBiases = new double [((int) numMovies + 1)];
       for (int i = 0; i < numMovies; ++i)
       {
           movieBiases[i] = 0.1;
@@ -317,11 +317,12 @@ int main()
 
           cout << "Error after Epoch " << finalError << "\n";
        }
+       int unforcedEpochs = featureEpochCounter;
        // didn't train on feature, because initialError - finalError < 0.0001 already
        // just train for n more epochs
        int minEpochs = 10;
        if (featureEpochCounter < minEpochs) {
-          for (int j = 0; j < minEpochs - featureEpochCounter; j++) {
+          for (int j = 0; j < minEpochs - unforcedEpochs; j++) {
             cout << "Force Training" << "\n";
             cout << "Feature " << i << "\n";
             cout << "Starting Epoch " << epochCounter << "\n";
