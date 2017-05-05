@@ -294,7 +294,6 @@ int main()
     double finalError = error();
     int epochCounter = 0;
     int featureEpochCounter = 0;
-    double threshold = 0.0001;
 
     cout << "Initial Error is: " << initialError << "\n";
     cout << "Final Error is:" << finalError << "\n";
@@ -304,7 +303,9 @@ int main()
       initialError = 10;
       featureEpochCounter = 0;
         // while error is decreasing by threshold
-        while (initialError - finalError > threshold) {
+        //while (initialError - finalError > 0.0001) {
+        int numIter = 20;
+        for (int j = 0; j < numIter; j++) {
           cout << "Feature " << i << "\n";
           cout << "Starting Epoch " << epochCounter << "\n";
 
@@ -317,24 +318,6 @@ int main()
 
           cout << "Error after Epoch " << finalError << "\n";
        }
-       // didn't train on feature, because initialError - finalError < 0.0001 already
-       // just train for n more epochs
-       int minEpochs = 10;
-       if (featureEpochCounter <= 1) {
-          for (int j = 0; j < minEpochs; j++) {
-            cout << "Feature " << i << "\n";
-            cout << "Starting Epoch " << epochCounter << "\n";
-
-            epochCounter++;
-            featureEpochCounter++;
-
-            initialError = finalError;
-            runEpoch(i);
-            finalError = error();
-
-            cout << "Error after Epoch " << finalError << "\n";
-          }
-        }
   }
 
   findQualPredictions();
