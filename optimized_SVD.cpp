@@ -86,14 +86,17 @@ void read_data()
     cout << "Reading in training data.\n";
 
     // read in ratings data - currently, this is training without the baseline
-    fstream ratings_file("../ratings_baseline_removed.bin", ios::in | ios::binary);
+    fstream ratings_file("../ratings_baseline_removed_int.bin", ios::in | ios::binary);
     ratings_file.read(reinterpret_cast<char *>(ratings), sizeof(int) * num_pts * POINT_SIZE);
     ratings_file.close();
 
     // read in index data
-    fstream indices_file("../indices.bin", ios::in | ios::binary);
+    fstream indices_file("../indices_int.bin", ios::in | ios::binary);
     indices_file.read(reinterpret_cast<char *>(indices), sizeof(int) * num_pts);
     indices_file.close();
+    int i = 1;
+       cout << indices[i] << "\n";
+        cout << ratings[i * POINT_SIZE] << " " << ratings[i * POINT_SIZE + 1] << "\n";
 }
 
 /*
@@ -124,7 +127,6 @@ double error(int set)
 
     for (int i = 0; i < num_pts; i++) {
         index = indices[i];
-
         if (index == set) {
             diff = (double)(ratings[i * POINT_SIZE + 3]) - 
             	predict_rating(ratings[i * POINT_SIZE], ratings[i * POINT_SIZE + 1]);
