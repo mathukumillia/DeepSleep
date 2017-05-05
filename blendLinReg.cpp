@@ -22,13 +22,13 @@ int main() {
   vector<const char*> probePredictionFiles;
   probePredictionFiles.push_back("probePrediction_eq10.dta");
   probePredictionFiles.push_back("probePrediction_eq11.dta");
-  probePredictionFiles.push_back("probeOutput.dta");
+  probePredictionFiles.push_back("probePrediction_eq4.dta");
 
   // enter the names of the qual prediction files
   vector<const char*> qualPredictionFiles;
   qualPredictionFiles.push_back("qualPrediction_eq10.dta");
   qualPredictionFiles.push_back("qualPrediction_eq11.dta");
-  qualPredictionFiles.push_back("output.dta");
+  qualPredictionFiles.push_back("qualPrediction_eq4.dta");
 
 /////////////////////////////////////////////////////////////////////////////////
 
