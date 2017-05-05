@@ -22,13 +22,13 @@ int main() {
   vector<const char*> probePredictionFiles;
   probePredictionFiles.push_back("probePrediction_eq10.dta");
   probePredictionFiles.push_back("probePrediction_eq11.dta");
-  probePredictionFiles.push_back("probePrediction_eq4.dta");
+  probePredictionFiles.push_back("probeOutput.dta");
 
   // enter the names of the qual prediction files
   vector<const char*> qualPredictionFiles;
   qualPredictionFiles.push_back("qualPrediction_eq10.dta");
   qualPredictionFiles.push_back("qualPrediction_eq11.dta");
-  qualPredictionFiles.push_back("qualPrediction_eq4.dta");
+  qualPredictionFiles.push_back("output.dta");
 
 /////////////////////////////////////////////////////////////////////////////////
 
@@ -73,20 +73,26 @@ int main() {
   ofstream qualPredictionBlendFile;
   qualPredictionBlendFile.open("qualPredictionBlend.dta");
   double predictionIndividual;
-  for (int qualIndex=0; qualIndex<numberOfQualRatings; qualIndex++){
-    vector<double> qualPredictionsIndividual;
-    for (int predictionIndex=0; predictionIndex<numberOfPredictionsToBlend; predictionIndex++){
-      ifstream qualPredictionFile(qualPredictionFiles[predictionIndex]);
+  vector<vector<double> > qualPredictionsIndividual;
+  for (int predictionIndex=0; predictionIndex<numberOfPredictionsToBlend; predictionIndex++){
+    ifstream qualPredictionFile(qualPredictionFiles[predictionIndex]);
+    vector<double> predictionVector;
+    for (int qualIndex=0; qualIndex<numberOfQualRatings; qualIndex++){
       qualPredictionFile >> predictionIndividual;
-      qualPredictionsIndividual.push_back(predictionIndividual);
-      qualPredictionFile.close();
+      predictionVector.push_back(predictionIndividual);
     }
+    qualPredictionsIndividual.push_back(predictionVector);
+    qualPredictionFile.close();
+  }
+  for (int qualIndex=0; qualIndex<numberOfQualRatings; qualIndex++){
     prediction = 0;
     for (int predictionIndex=0; predictionIndex<numberOfPredictionsToBlend; predictionIndex++){
-      prediction = prediction + w(predictionIndex)*qualPredictionsIndividual[predictionIndex];    
+      prediction = prediction + w(predictionIndex)*qualPredictionsIndividual[predictionIndex][qualIndex];    
     }
     qualPredictionBlendFile << prediction << endl;
   }
+
+
   qualPredictionBlendFile.close(); 
 
   // as a check, calculate the rmse of the blend on the probe set and compare
