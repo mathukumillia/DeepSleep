@@ -2,14 +2,17 @@ CPP = g++
 CPPFLAGS = -c -g 
 LDFLAGS = -lm
 
-run: SVD++
-	./SVD++
-
 SVD++: SVD++.o
 	$(CPP) $(LDFLAGS) $^ -o $@
 
 SVD++.o: SVD++.cpp
 	$(CPP) $(CPPFLAGS) $^ -o $@
 
+naive_SVD: optimized_SVD.o
+	$(CPP) $(LDFLAGS) $^ -o $@
+
+optimized_SVD.o: optimized_SVD.cpp
+	$(CPP) $(CPPFLAGS) $^ -o $@
+
 clean: 
-	rm *.o SVD++
+	rm -f *.o SVD++ naive_SVD
