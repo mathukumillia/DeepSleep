@@ -3,7 +3,6 @@
 #include <string>
 #include <numeric>
 #include <math.h>
-#include <algorithm>
 #include "baselinePrediction.h"
 using namespace std;
 
@@ -18,7 +17,7 @@ const double numPts = 102416306;
 // lrate is the learning rate
 const double K = 20;
 const double lrate = 0.001;
-const double lambda = 0.05;
+const double lambda = 0.02;
 const double global_mean = 3.6033;
 
 // these 2D arrays are the U and V in the SVD
@@ -68,14 +67,14 @@ void initialize()
 
       indexes = new double [((int) numPts)];
 
-      userBiases = new double [((int) numUsers + 1)];
-      for (int i = 0; i < numUsers + 1; ++i)
+      userBiases = new double [((int) numUsers)];
+      for (int i = 0; i < numUsers; ++i)
       {
           userBiases[i] = 0.1;
       }
 
-      movieBiases = new double [((int) numMovies + 1)];
-      for (int i = 0; i < numMovies + 1; ++i)
+      movieBiases = new double [((int) numMovies)];
+      for (int i = 0; i < numMovies; ++i)
       {
           movieBiases[i] = 0.1;
       }
@@ -94,7 +93,7 @@ void readRatingsIndexes()
     fstream indexFile ("../../Caltech/CS156B/um/all.idx");
     // user, movie, date, rating
     double inputs [4] = {};
-    int index = 0;
+    int index;
     int pt = 0;
 
     if (ratingsFile.is_open() && indexFile.is_open()) {
@@ -226,11 +225,11 @@ void findQualPredictions()
       while (qualFile >> inputs[0] >> inputs[1] >> inputs[2]) {
          int user = inputs[0];
          int movie = inputs[1];
-         double date = inputs[2];
+         int date = inputs[2];
 
          // add back baseline into predictions
-         double prediction = (userBiases[user] + movieBiases[movie] + 
-            predictRating(user, movie)) + baselinePrediction(user, movie, date);
+         double prediction = userBiases[user] + movieBiases[movie] + 
+            predictRating(user, movie) + baselinePrediction(user, movie, date);
 
          // clip predictions within range of 1 and 5
          if(prediction < 1){
@@ -295,7 +294,6 @@ int main()
     double finalError = error();
     int epochCounter = 0;
     int featureEpochCounter = 0;
-    double threshold = 0.0001;
 
     cout << "Initial Error is: " << initialError << "\n";
     cout << "Final Error is:" << finalError << "\n";
@@ -305,7 +303,9 @@ int main()
       initialError = 10;
       featureEpochCounter = 0;
         // while error is decreasing by threshold
-        while (initialError - finalError > threshold) {
+        //while (initialError - finalError > 0.0001) {
+        int numIter = 20;
+        for (int j = 0; j < numIter; j++) {
           cout << "Feature " << i << "\n";
           cout << "Starting Epoch " << epochCounter << "\n";
 
@@ -318,26 +318,6 @@ int main()
 
           cout << "Error after Epoch " << finalError << "\n";
        }
-       int unforcedEpochs = featureEpochCounter;
-       // didn't train on feature, because initialError - finalError < 0.0001 already
-       // just train for n more epochs
-       int minEpochs = 10;
-       if (unforcedEpochs < minEpochs) {
-          for (int j = 0; j < minEpochs - unforcedEpochs; j++) {
-            cout << "FORCE TRAINING" << "\n";
-            cout << "Feature " << i << "\n";
-            cout << "Starting Epoch " << epochCounter << "\n";
-
-            epochCounter++;
-            featureEpochCounter++;
-
-            initialError = finalError;
-            runEpoch(i);
-            finalError = error();
-
-            cout << "Error after Epoch " << finalError << "\n";
-          }
-        }
   }
 
   findQualPredictions();
