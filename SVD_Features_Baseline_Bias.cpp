@@ -320,8 +320,9 @@ int main()
        // didn't train on feature, because initialError - finalError < 0.0001 already
        // just train for n more epochs
        int minEpochs = 10;
-       if (featureEpochCounter <= 1) {
-          for (int j = 0; j < minEpochs; j++) {
+       if (featureEpochCounter < minEpochs) {
+          for (int j = 0; j < minEpochs - featureEpochCounter; j++) {
+            cout << "Force Training" << "\n";
             cout << "Feature " << i << "\n";
             cout << "Starting Epoch " << epochCounter << "\n";
 
