@@ -3,6 +3,7 @@
 #include <string>
 #include <numeric>
 #include <math.h>
+#include <algorithm>
 #include "baselinePrediction.h"
 using namespace std;
 
@@ -17,7 +18,7 @@ const double numPts = 102416306;
 // lrate is the learning rate
 const double K = 20;
 const double lrate = 0.001;
-const double lambda = 0.02;
+const double lambda = 0.05;
 const double global_mean = 3.6033;
 
 // these 2D arrays are the U and V in the SVD
@@ -68,13 +69,13 @@ void initialize()
       indexes = new double [((int) numPts)];
 
       userBiases = new double [((int) numUsers + 1)];
-      for (int i = 0; i < numUsers; ++i)
+      for (int i = 0; i < numUsers + 1; ++i)
       {
           userBiases[i] = 0.1;
       }
 
       movieBiases = new double [((int) numMovies + 1)];
-      for (int i = 0; i < numMovies; ++i)
+      for (int i = 0; i < numMovies + 1; ++i)
       {
           movieBiases[i] = 0.1;
       }
@@ -93,7 +94,7 @@ void readRatingsIndexes()
     fstream indexFile ("../../Caltech/CS156B/um/all.idx");
     // user, movie, date, rating
     double inputs [4] = {};
-    int index;
+    int index = 0;
     int pt = 0;
 
     if (ratingsFile.is_open() && indexFile.is_open()) {
@@ -155,8 +156,8 @@ double error ()
       index = indexes[i];
 
       if (index == 2) {
-          int user = ratings[i][0];
-          int movie = ratings[i][1];
+          double user = ratings[i][0];
+          double movie = ratings[i][1];
           double rating = ratings[i][3];
           diff = rating - (userBiases[user] + movieBiases[movie] + predictRating(user, movie));
 
@@ -223,13 +224,13 @@ void findQualPredictions()
 
     if (qualFile.is_open()) {
       while (qualFile >> inputs[0] >> inputs[1] >> inputs[2]) {
-         int user = inputs[0];
-         int movie = inputs[1];
-         int date = inputs[2];
+         double user = inputs[0];
+         double movie = inputs[1];
+         double date = inputs[2];
 
          // add back baseline into predictions
-         double prediction = userBiases[user] + movieBiases[movie] + 
-            predictRating(user, movie) + baselinePrediction(user, movie, date);
+         double prediction = (userBiases[user] + movieBiases[movie] + 
+            predictRating(user, movie)) + baselinePrediction(user, movie, date);
 
          // clip predictions within range of 1 and 5
          if(prediction < 1){
@@ -321,9 +322,9 @@ int main()
        // didn't train on feature, because initialError - finalError < 0.0001 already
        // just train for n more epochs
        int minEpochs = 10;
-       if (featureEpochCounter < minEpochs) {
+       if (unforcedEpochs < minEpochs) {
           for (int j = 0; j < minEpochs - unforcedEpochs; j++) {
-            cout << "Force Training" << "\n";
+            cout << "FORCE TRAINING" << "\n";
             cout << "Feature " << i << "\n";
             cout << "Starting Epoch " << epochCounter << "\n";
 
