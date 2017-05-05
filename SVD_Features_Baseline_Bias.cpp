@@ -156,8 +156,8 @@ double error ()
       index = indexes[i];
 
       if (index == 2) {
-          double user = ratings[i][0];
-          double movie = ratings[i][1];
+          int user = ratings[i][0];
+          int movie = ratings[i][1];
           double rating = ratings[i][3];
           diff = rating - (userBiases[user] + movieBiases[movie] + predictRating(user, movie));
 
@@ -224,8 +224,8 @@ void findQualPredictions()
 
     if (qualFile.is_open()) {
       while (qualFile >> inputs[0] >> inputs[1] >> inputs[2]) {
-         double user = inputs[0];
-         double movie = inputs[1];
+         int user = inputs[0];
+         int movie = inputs[1];
          double date = inputs[2];
 
          // add back baseline into predictions
