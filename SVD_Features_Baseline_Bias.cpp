@@ -3,21 +3,25 @@
 #include <string>
 #include <numeric>
 #include <math.h>
+#include <stdlib.h>
 #include <algorithm>
 #include "baselinePrediction.h"
 using namespace std;
+
+#define STOPPING_CONDITION 0
+#define MAX_EPOCHS 50
 
 // these are all the global variables used by the program
 
 // users and movies are one indexed
 const double numUsers = 458293;
 const double numMovies = 17770;
-const double numPts = 102416306;
+const int numPts = 102416306;
 
 // K is the constant representing the number of features
 // lrate is the learning rate
-const double K = 20;
-const double lrate = 0.001;
+const double K = 50;
+const double lrate = 0.01;
 const double lambda = 0.05;
 const double global_mean = 3.6033;
 
@@ -33,6 +37,15 @@ double *indexes;
 double *userBiases;
 double *movieBiases;
 
+double getRandom() {
+  // generate random number from 10 to 100
+   int first = rand() % 91 + 10;
+   double second = 1.0;
+
+   // get a random double between 0.1 and 0.01
+   return second / first;
+}
+
 // creates arrays for storage
 void initialize()
 {
@@ -46,7 +59,7 @@ void initialize()
         userValues[i] = new double[(int) K];
         for (int j = 0; j < K; j++)
         {
-          userValues[i][j] = 0.1;
+          userValues[i][j] = 0.1 * (double)(rand() % 10) + 0.01; // arbitrary initial condition
         }
       }
 
@@ -56,7 +69,7 @@ void initialize()
         movieValues[i] = new double[(int) K];
         for (int j = 0; j < K; j++)
         {
-          movieValues[i][j] = 0.1;
+          movieValues[i][j] = 0.1 * (double)(rand() % 10) + 0.01; // arbitrary initial condition
         }
       }
       // create  the arrays that store the ratings input data and the indexes
@@ -71,13 +84,13 @@ void initialize()
       userBiases = new double [((int) numUsers + 1)];
       for (int i = 0; i < numUsers + 1; ++i)
       {
-          userBiases[i] = 0.1;
+          userBiases[i] = 0.1 * (double)(rand() % 10) + 0.01; // arbitrary initial condition
       }
 
       movieBiases = new double [((int) numMovies + 1)];
       for (int i = 0; i < numMovies + 1; ++i)
       {
-          movieBiases[i] = 0.1;
+          movieBiases[i] = 0.1 * (double)(rand() % 10) + 0.01; // arbitrary initial condition
       }
 
       cout << "Done allocating memory.\n";
@@ -141,7 +154,11 @@ double magSquared(double* vector) {
     return mag;
 }
 
-double error ()
+/*
+* Gets the total error of the SVD model on the set index provided
+* i.e., to get validation error, pass in set = 2
+*/
+double error (int set)
 {
   cout << "Calculating Validation error..." << "\n";
 
@@ -149,19 +166,18 @@ double error ()
   int counter = 0;
   double error = 0;
   double diff = 0;
-  double index = 0;
+  int index = 0;
   double numValidationPts = 0;
 
   for (int i = 0; i < numPts; i++) {
       index = indexes[i];
 
-      if (index == 2) {
+      if (index == set) {
           int user = ratings[i][0];
           int movie = ratings[i][1];
           double rating = ratings[i][3];
           diff = rating - (userBiases[user] + movieBiases[movie] + predictRating(user, movie));
-
-          //cout << "diff " << diff << "\n";
+          //cout << diff << "\n";
 
           double errorpart1 = diff * diff;
           //double errorpart2 = (magSquared(userValues[user]) + magSquared(movieValues[movie]) + 
@@ -169,13 +185,7 @@ double error ()
           //double errorpart2 = magSquared(userValues[user]) + magSquared(movieValues[movie]);
 
           error += errorpart1;
-
-          //cout << "error1 " << errorpart1 << "\n";
-          //cout << "error2 " << errorpart2 << "\n";
-          //cout << "error " << error << "\n";
           numValidationPts += 1;
-
-          //cout << "pt number " << numValidationPts << "\n";
       }
       counter++;
   }
@@ -203,12 +213,23 @@ void train(int user, int movie, int rating, int feature)
 void runEpoch (int feature)
 {
     cout << "Running Epoch..." << "\n";
-    for (int i = 0; i < numPts; i++) {
-        int index = indexes[i];
+    int pt;
+    int index;
 
-        if (index == 1) {
-            train(ratings[i][0], ratings[i][1], ratings[i][3], feature);
+    for (int i = 0; i < numPts; i++) {
+        // select a random pt to train with
+        pt = rand() % numPts;
+        index = indexes[pt];
+
+        // make sure the selected point is in the first data set
+        while (index != 1)
+        {
+            pt = rand() % numPts;
+            index = indexes[pt];
         }
+
+        // train on this point
+        train(ratings[pt][0], ratings[pt][1], ratings[pt][3], feature);
     }
     cout << "Epoch complete." << "\n";
 }
@@ -218,29 +239,31 @@ void findQualPredictions()
     cout << "Finding Qual Predictions" << "\n";
 
     ofstream outputFile;
-    fstream qualFile ("../../Caltech/CS156B/um/qual.dta");
     outputFile.open("output.dta");
-    double inputs [3] = {};
+    int index;
+    
+    for (int i = 0; i < numPts; i++) {
+        index = indexes[i];
 
-    if (qualFile.is_open()) {
-      while (qualFile >> inputs[0] >> inputs[1] >> inputs[2]) {
-         int user = inputs[0];
-         int movie = inputs[1];
-         double date = inputs[2];
+        if(index == 5){
+          int user = ratings[i][0];
+          int movie = ratings[i][1];
+          double date = ratings[i][2];
 
-         // add back baseline into predictions
-         double prediction = (userBiases[user] + movieBiases[movie] + 
-            predictRating(user, movie)) + baselinePrediction(user, movie, date);
+           // add back baseline into predictions
+          double prediction = (userBiases[user] + movieBiases[movie] + 
+              predictRating(user, movie)) + baselinePrediction(user, movie, date);
 
-         // clip predictions within range of 1 and 5
-         if(prediction < 1){
-            prediction = 1;
-         }
-         if(prediction > 5){
-            prediction = 5;
-         }
-         outputFile << prediction << "\n";
-      }
+           // clip predictions within range of 1 and 5
+           if(prediction < 1){
+              prediction = 1;
+           }
+           if(prediction > 5){
+              prediction = 5;
+            }
+
+           outputFile << prediction << "\n";
+        }
     }
 }
 
@@ -282,6 +305,10 @@ void cleanUp()
       delete[] ratings;
 
       delete[] indexes;
+
+      delete[] userBiases;
+
+      delete[] movieBiases;
 }
 
 // Opens the file and runs the SVD
@@ -291,21 +318,35 @@ int main()
     readRatingsIndexes();
     // gets the initial validation error
     // NOTE: the initial error should calculate the error in the final program
-    double initialError = 10;
-    double finalError = error();
+    double initialError = 10000;
+    double finalError = error(2);
     int epochCounter = 0;
     int featureEpochCounter = 0;
-    double threshold = 0.0001;
 
-    cout << "Initial Error is: " << initialError << "\n";
-    cout << "Final Error is:" << finalError << "\n";
+    cout << "Initial Error is: " << finalError << "\n";
+
+    for(int i = 0; i < K; i++) {
+      initialError = 10000;
+      featureEpochCounter = 0;
+      while (initialError - finalError > STOPPING_CONDITION && featureEpochCounter <= MAX_EPOCHS) {
+          cout << "Feature " << i << "\n";
+          cout << "Starting Epoch " << epochCounter  << "\n";
+          initialError = finalError;
+          runEpoch(i);
+          finalError = error(2); // error(2) returns the validation error
+          cout << "Error after Epoch " << epochCounter  << ": " << finalError << "\n";
+          featureEpochCounter++;
+          epochCounter++;
+          cout << "-----------------------------------\n";
+      }
+  }
 
     // train one feature at a time
-    for(int i = 0; i < K; i++) {
-      initialError = 10;
-      featureEpochCounter = 0;
+   //for(int i = 0; i < K; i++) {
+      //initialError = 10;
+      //featureEpochCounter = 1;
         // while error is decreasing by threshold
-        while (initialError - finalError > threshold) {
+        /*while (initialError - finalError > threshold) {
           cout << "Feature " << i << "\n";
           cout << "Starting Epoch " << epochCounter << "\n";
 
@@ -337,11 +378,23 @@ int main()
 
             cout << "Error after Epoch " << finalError << "\n";
           }
-        }
+        }*/
+      /*  for(int j = 0; j < 30; j++){
+          cout << "Feature " << i << "\n";
+          cout << "Starting Epoch " << j << "\n";
+
+          initialError = finalError;
+          runEpoch(i);
+          finalError = error();
+
+          cout << "Error after Epoch " << finalError << "\n";
+
+          featureEpochCounter++;
+        }*/
+      findQualPredictions();
+      storeUserFeatures();
+      cleanUp();
+      return 0;
   }
 
-  findQualPredictions();
-  storeUserFeatures();
-  cleanUp();
-  return 0;
-}
+//}
