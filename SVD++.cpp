@@ -3,6 +3,7 @@
 #include <string>
 #include <numeric>
 #include <math.h>
+#include "baselinePrediction.h"
 
 // a point looks like (user, movie, date, rating)
 #define POINT_SIZE 4 // the size of a single input point in the training data
@@ -309,7 +310,7 @@ void findQualPredictions()
             user_vector_sum = get_user_vector((int)ratings[i * POINT_SIZE], (int)ratings[i * POINT_SIZE + 1]);
             // I have to add the ratings in the file because this ratings file has the baselines removed
             // this rating is negative, so I must multiply by -1 first
-            prediction = (-1 * ratings[i * POINT_SIZE + 3]) + predict_rating((int)ratings[i * POINT_SIZE + 1], user_vector_sum);
+            prediction = baselinePrediction((int)ratings[i * POINT_SIZE], (int)ratings[i * POINT_SIZE + 1], (int)ratings[i * POINT_SIZE + 2]) + predict_rating((int)ratings[i * POINT_SIZE + 1], user_vector_sum);
             if (prediction < 1)
             {
                 prediction = 1;
