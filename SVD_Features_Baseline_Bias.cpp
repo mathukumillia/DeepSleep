@@ -19,12 +19,12 @@ using namespace std;
 const int num_users = 458293;
 const int num_movies = 17770;
 const int num_pts = 102416306;
-const double lambda = 0.05;
+const double lambda = 0.02;
 
 // K is the constant representing the number of features
 // lrate is the learning rate
 const int K = 50;
-const double lrate = 0.01;
+const double lrate = 0.005;
 const double global_mean = 3.6033;
 
 // these 2D arrays are the U and V in the SVD
