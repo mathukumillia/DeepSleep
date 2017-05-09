@@ -22,10 +22,8 @@ const double num_movies = 17770;
 const double num_pts = 102416306;
 
 // K is the constant representing the number of features
-// lrate is the learning rate
 // gamma_2 is the step size
 const double K = 5;
-const double lrate = 0.001;
 double GAMMA_2 = 0.007;
 
 // though these are declared as single dimensional, I will use them as 2D arrays
@@ -270,14 +268,14 @@ inline void train(double user, double movie, double date, double rating)
         movie_factor = movie_values[(int)movie * (int)K + i];
        // cout << "movie factor: " << movie_factor << "\n";
         // update the movie factor in the movie values array
-        movie_values[(int)movie * (int)K + i] = 
-        	movie_factor + GAMMA_2 * (point_error * user_vector[i] - LAMBDA_7 * movie_factor);
+        movie_values[(int)movie * (int)K + i] +=
+          GAMMA_2 * (point_error * user_vector[i] - LAMBDA_7 * movie_factor);
         // stores the current user factor
         user_factor = user_values[(int)user * (int)K + i];
         //cout << "user factor:" << user_factor << "\n";
         // update the user factor in the user values array
-        user_values[(int)user * (int)K + i] =
-        	 user_factor + GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
+        user_values[(int)user * (int)K + i] +=
+        	GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
     }
     
     // update the neighbors factors
@@ -291,7 +289,8 @@ inline void train(double user, double movie, double date, double rating)
         {
             y_factor = y[movie_neighbor * (int)K + j];
             movie_factor = movie_values[(int)movie * (int)K + j];
-            y[movie_neighbor * (int)K + j] = y_factor + GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
+            y[movie_neighbor * (int)K + j] += 
+            	GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
         }
     }
 
@@ -308,16 +307,21 @@ inline void run_epoch()
    	double movie;
    	double date;
    	double rating;
+   	int pt;
     for (int i = 0; i < num_pts; i++) {
-        // trains only on point set one; change this line if you want to train
+
+    	// trains only on point set one; change this line if you want to train
         // on additional points
-        if (indices[i] == 1) {
-        	user = ratings[i * POINT_SIZE];
-        	movie = ratings[i * POINT_SIZE + 1];
-        	date = ratings[i * POINT_SIZE + 2];
-        	rating = ratings[i * POINT_SIZE + 3];
-            train(user, movie, date, rating);
-        }
+    	pt = rand() % (int)num_pts;
+    	while (indices[pt] != 1)
+    	{
+    		pt = rand() % (int)num_pts;
+    	}
+    	user = ratings[pt * POINT_SIZE];
+    	movie = ratings[pt * POINT_SIZE + 1];
+    	date = ratings[pt * POINT_SIZE + 2];
+    	rating = ratings[pt * POINT_SIZE + 3];
+        train(user, movie, date, rating);
         if (i%1000000 == 0)
         {
             cout << "i: " << i << "\n";
