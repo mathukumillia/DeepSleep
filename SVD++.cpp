@@ -10,7 +10,6 @@
 #define STOPPING_CONDITION 0
 #define MAX_EPOCHS 30 // the maximum number of epochs to run; 30 in the paper
 #define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
-#define GAMMA_2 0.007 // obtained from the SVD++ paper
 #define LAMBDA_7 0.015 // obtained from the SVD++ paper
 
 using namespace std;
@@ -24,8 +23,10 @@ const double num_pts = 102416306;
 
 // K is the constant representing the number of features
 // lrate is the learning rate
+// gamma_2 is a step size that gets altered and is thus not constant
 const double K = 5;
 const double lrate = 0.001;
+double gamma_2 = 0.007;
 
 // though these are declared as single dimensional, I will use them as 2D arrays
 // to facilitate this, I will store the sizes of the arrays as well
@@ -57,7 +58,7 @@ int y_size = (int) ((num_movies + 1) * K);
 /*
 * Allocates memory and initializes user, movie, ratings, and indices arrays
 */
-void initialize()
+inline void initialize()
 {
     cout << "Initializing the program.\n";
 
@@ -67,15 +68,15 @@ void initialize()
     user_values = new double[user_values_size];
     for (int i = 0; i < user_values_size; i++)
     {
-        user_values[i] = 0.1; // arbitrary initial condition
+        user_values[i] = 0.1 * (double)(rand() % 10) + 0.01; // arbitrary initial condition
     }
 
     movie_values = new double[movie_values_size];
     y = new double[y_size];
     for (int i = 0; i < movie_values_size; i++)
     {
-        movie_values[i] = 0.1;
-        y[i] = 0.1; // this was an arbitrary initial condition
+        movie_values[i] = 0.1 * (double)(rand() % 10) + 0.01;
+        y[i] = 0.1 * (double)(rand() % 10) + 0.01; // this was an arbitrary initial condition
     }
 
     // create  the arrays that store the ratings input data and the indexes
@@ -92,7 +93,7 @@ void initialize()
 /*
 * clears all used memory
 */
-void clean_up()
+inline void clean_up()
 {
     cout << "Cleaning up.\n";
     delete [] user_values;
@@ -107,7 +108,7 @@ void clean_up()
 /*
 * Reads the input data into ratings and indices
 */
-void read_data()
+inline void read_data()
 {
     cout << "Reading in training data.\n";
     // read in ratings data - currently, this is training without the baseline
@@ -136,7 +137,7 @@ void read_data()
 * this is p_u + |N(u)|^(-1/2) * sum of y's in neighborhood of u
 * when using this, remember to delete the allocated memory for the user vector
 */
-double* get_user_vector(int user, int movie)
+inline double* get_user_vector(int user, int movie)
 {
     // stores the sum of user vectors
     // (all the y's in the users neighborhood plus the user factors)
@@ -185,7 +186,7 @@ double* get_user_vector(int user, int movie)
 * we found earlier
 *
 */
-double predict_rating(int movie, double * user_vector_sum)
+inline double predict_rating(int movie, double * user_vector_sum)
 {
     double rating = 0;
     for (int i = 0; i < K; i++)
@@ -199,7 +200,7 @@ double predict_rating(int movie, double * user_vector_sum)
 * Gets the total error of the SVD++ model on the set index provided
 * i.e., to get validation error, pass in set = 2
 */
-double error(int set)
+inline double error(int set)
 {
     cout << "Calculating error.\n";
 
@@ -227,7 +228,7 @@ double error(int set)
 * Point must contain the user, movie, date, and rating
 * utilizes SGD
 */
-void train(double user, double movie, double date, double rating)
+inline void train(double user, double movie, double date, double rating)
 {
     double * user_vector_sum = get_user_vector((int)user, (int)movie);
     double point_error = rating - predict_rating((int)movie, user_vector_sum);
@@ -240,11 +241,11 @@ void train(double user, double movie, double date, double rating)
         // stores the current factor that we are updating
         movie_factor = movie_values[(int)movie * (int)K + i];
         // update the movie factor in the movie values array
-        movie_values[(int)movie * (int)K + i] = movie_factor + GAMMA_2 * (point_error * user_vector_sum[i] - LAMBDA_7 * movie_factor);
+        movie_values[(int)movie * (int)K + i] = movie_factor + gamma_2 * (point_error * user_vector_sum[i] - LAMBDA_7 * movie_factor);
         // stores the current user factor
         user_factor = user_values[(int)user * (int)K + i];
         // update the user factor in the user values array
-        user_values[(int)user * (int)K + i] = user_factor + GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
+        user_values[(int)user * (int)K + i] = user_factor + gamma_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
     }
 
     // update the neighbors factors
@@ -258,34 +259,44 @@ void train(double user, double movie, double date, double rating)
         {
             y_factor = y[movie_neighbor * (int)K + j];
             movie_factor = movie_values[(int)movie * (int)K + j];
-            y[movie_neighbor * (int)K + j] = y_factor + GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
+            y[movie_neighbor * (int)K + j] = y_factor + gamma_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
         }
     }
 
     // delete the user_vector_sum because it was allocated in the get_user_vector
-    // function
     delete [] user_vector_sum;
 }
 
 /*
 * Iterates through every point in the training set and trains on each one
 */
-void run_epoch()
+inline void run_epoch()
 {
-    cout << "Running an epoch.\n";
-    int index;
-    for (int i = 0; i < num_pts; i++) {
-        index = indices[i];
-        // trains only on point set one; change this line if you want to train
-        // on additional points
-        if (index == 1) {
-            train(ratings[i * POINT_SIZE], ratings[i * POINT_SIZE + 1], ratings[i * POINT_SIZE + 2], ratings[i * POINT_SIZE + 3]);
+    cout << "Running Epoch." << "\n";
+
+    int pt;
+    double index;
+	for (int i = 0; i < num_pts; i++) {
+
+        // select an arbitrary point to train with 
+        pt = rand() % (int)num_pts;
+		index = indices[pt];
+        // make sure the selected point is in the first data set
+        while (index != 1)
+        {
+            pt = rand() % (int)num_pts;
+            index = indices[pt];
         }
-        if (i%1000000 == 0)
+        // train with this point
+		train(ratings[i * POINT_SIZE], ratings[i * POINT_SIZE + 1], ratings[i * POINT_SIZE + 2], ratings[i * POINT_SIZE + 3]);
+
+		if (i%1000000 == 0)
         {
             cout << "i: " << i << "\n";
         }
-    }
+	}
+	gamma_2 = 0.9 * gamma_2;
+	cout << "Epoch complete." << "\n";
 }
 
 /*
@@ -293,7 +304,7 @@ void run_epoch()
 * fix this to work with baseline removed predictions
 *
 */
-void findQualPredictions()
+inline void findQualPredictions()
 {
     cout << "Finding and writing qual predictions.\n";
     ofstream outputFile;
@@ -330,7 +341,7 @@ int main()
     initialize();
     read_data();
 
-    double initialError = 10;
+    double initialError = 100000;
     double finalError = error(2); // gets the validation error before training
     int counter = 1;
 
