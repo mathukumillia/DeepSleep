@@ -19,4 +19,4 @@ optimized_SVD.o: optimized_SVD.cpp
 optimized_SVD.cpp: baselinePrediction.h
 
 clean: 
-	rm -f *.o SVD++ naive_SVD
+	rm -f *.o SVD++ naive_SVD SVD++ SVD++_probe_output.dta SVD++_qual_output.dta

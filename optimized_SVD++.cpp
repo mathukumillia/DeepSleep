@@ -11,6 +11,8 @@
 #define MAX_EPOCHS 30 // the maximum number of epochs to run; 30 in the paper
 #define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
 #define LAMBDA_7 0.015 // obtained from the SVD++ paper
+#define LAMBDA_6 0.005 // from paper
+#define DECAY 0.9 // from paper
 
 using namespace std;
 
@@ -23,8 +25,9 @@ const double num_pts = 102416306;
 
 // K is the constant representing the number of features
 // gamma_2 is the step size
-const double K = 50;
+const double K = 100;
 double GAMMA_2 = 0.007;
+double GAMMA_1 = 0.007;
 
 // though these are declared as single dimensional, I will use them as 2D arrays
 // to facilitate this, I will store the sizes of the arrays as well
@@ -53,6 +56,10 @@ double *neighborhood_sizes;
 double *y;
 int y_size = (int) ((num_movies + 1) * K);
 
+// the user and movie bias arrays
+double * user_biases;
+double * movie_biases;
+
 /*
 * Allocates memory and initializes user, movie, ratings, and indices arrays
 */
@@ -66,14 +73,14 @@ inline void initialize()
     user_values = new double[user_values_size];
     for (int i = 0; i < user_values_size; i++)
     {
-        user_values[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);; // arbitrary initial condition
+        user_values[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K); // arbitrary initial condition
     }
 
     movie_values = new double[movie_values_size];
     y = new double[y_size];
     for (int i = 0; i < movie_values_size; i++)
     {
-        movie_values[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);;
+        movie_values[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);
         y[i] = 0.0; // this was an arbitrary initial condition
     }
 
@@ -84,6 +91,18 @@ inline void initialize()
     neighborhoods = new int[neighborhoods_size];
     neighborhood_sizes = new double[(int)(num_users + 1)];
 
+    // initialize the user and movie biases
+    user_biases = new double[(int)num_users + 1];
+    for (int i = 0; i < num_users + 1; i++)
+    {
+        user_biases[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);
+    }
+
+    movie_biases = new double[(int)num_movies + 1];
+    for (int i = 0; i < num_movies + 1; i++)
+    {
+        movie_biases[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K); 
+    }
 
     cout << "Done allocating memory.\n";
 }
@@ -101,6 +120,8 @@ inline void clean_up()
     delete [] neighborhoods;
     delete [] neighborhood_sizes;
     delete [] y;
+    delete [] user_biases;
+    delete [] movie_biases;
 }
 
 /*
@@ -186,6 +207,10 @@ inline double predict_rating(int user, int movie)
         rating += user_vector[i] * movie_values[movie * (int)K + i];
     }
 
+    // add in the user and movie biases
+    rating += user_biases[user];
+    rating += movie_biases[movie];
+
     delete [] user_vector;
     return rating;
 }
@@ -206,6 +231,9 @@ inline double predict_rating(int user, int movie, double * y_sum)
     {
         rating += user_vector[i] * movie_values[movie * (int)K + i];
     }
+    // add in the user and movie biases
+    rating += user_biases[user];
+    rating += movie_biases[movie];
     return rating;
 }
 
@@ -279,27 +307,33 @@ inline void train()
         // this goes through all the training samples associated with a user
         while (ratings[pt_index * POINT_SIZE] == userId)
         {
-            itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
-            rating = ratings[pt_index * POINT_SIZE + 3];
-            // get the point error
-            point_error = rating - predict_rating(userId, itemId, y_sum_im);
-            for (i = 0; i < K; i++)
+            if (indices[pt_index] == 1)
             {
-                // update the movie and user factors 
-                movie_factor = movie_values[itemId * (int)K + i];
-                user_factor = user_values[userId * (int)K + i];
-
-                movie_values[itemId * (int)K + i] += 
-                    GAMMA_2 * (point_error * (user_factor + y_sum_im[i]) - LAMBDA_7 * movie_factor);
-                user_values[userId * (int)K + i] +=
-                    GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
-
-                // update y_sum_im
-                if(size != 0)
+                itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
+                rating = ratings[pt_index * POINT_SIZE + 3];
+                // get the point error
+                point_error = rating - predict_rating(userId, itemId, y_sum_im);
+                for (i = 0; i < K; i++)
                 {
-                    y_sum_im[i] += 
-                        GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_sum_im[i]);
-                }            
+                    // update the movie and user factors 
+                    movie_factor = movie_values[itemId * (int)K + i];
+                    user_factor = user_values[userId * (int)K + i];
+
+                    movie_values[itemId * (int)K + i] += 
+                        GAMMA_2 * (point_error * (user_factor + y_sum_im[i]) - LAMBDA_7 * movie_factor);
+                    user_values[userId * (int)K + i] +=
+                        GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
+
+                    // update y_sum_im
+                    if(size != 0)
+                    {
+                        y_sum_im[i] += 
+                            GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_sum_im[i]);
+                    }            
+                }
+                // update the user and movie biases
+                user_biases[userId] += GAMMA_1 * (point_error - LAMBDA_6 * user_biases[userId]);
+                movie_biases[itemId] += GAMMA_1 * (point_error - LAMBDA_6 * movie_biases[itemId]);
             }
             // update the pt_index to the next point
             pt_index++;
@@ -329,7 +363,8 @@ inline void run_epoch()
     cout << "Running an epoch.\n";
     train();
     // decrease gamma_2 by 10%, as suggested in paper
-    GAMMA_2 = 0.9 * GAMMA_2;
+    GAMMA_2 = DECAY * GAMMA_2;
+    GAMMA_1 = DECAY * GAMMA_1;
 }
 
 /*
@@ -394,6 +429,8 @@ int main()
     while (counter <= MAX_EPOCHS) {
         cout << "Starting Epoch " << counter << "\n";
         run_epoch();
+        finalError = error(2);
+        cout << "Error after Epoch " << counter << ": " << finalError << "\n";
         counter++;
     }
     finalError = error(2); // error(2) returns the validation error
