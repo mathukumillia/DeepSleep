@@ -193,9 +193,14 @@ inline double predict_rating(int user, int movie)
 /*
 * Predicts the rating given a user vector that has already been calculated
 */
-inline double predict_rating(double * user_vector, int movie)
+inline double predict_rating(int user, int movie, double * y_sum)
 {
-	// compute the rating as a fu
+    double user_vector[(int)K] = {};
+    for (int i = 0; i < K; i++)
+    {
+        user_vector[i] = user_values[user * (int)K + i] + y_sum[i];
+    }
+	// compute the rating
 	double rating = 0;
     for (int i = 0; i < K; i++)
     {
@@ -244,54 +249,76 @@ inline double error (int set)
 * neighborhood 
 * utilizes SGD
 */
-inline void train(double user, double movie, double date, double rating, double * y_sum)
+inline void train()
 {
+    int userId, itemId, currentUser, i;
+    double rating;
+    int pt_index = 0;
+    double * y_sum_im = new double[(int)K]();
+    double * y_sum_old = new double[(int)K]();
     double user_vector[(int)K] = {};
-	// add the values of the user factors to these neighborhood values
-	for (int i = 0; i < K; i++)
-	{
-		user_vector[i] = user_values[(int)user * (int)K + i] + y_sum[i];
-	}
-
-	double point_error = rating - predict_rating(user_vector, (int)movie);
-
-	// update the movie and user factors 
+    double point_error;
     double movie_factor;
     double user_factor;
-    for (int i = 0; i < K; i++)
+    // neighborhood
+    double size; 
+
+    // iterates through the users
+    for (userId = 1; userId < num_users; userId++)
     {
-        // stores the current factor that we are updating
-        movie_factor = movie_values[(int)movie * (int)K + i];
-       // cout << "movie factor: " << movie_factor << "\n";
-        // update the movie factor in the movie values array
-        movie_values[(int)movie * (int)K + i] +=
-          GAMMA_2 * (point_error * user_vector[i] - LAMBDA_7 * movie_factor);
-        // stores the current user factor
-        user_factor = user_values[(int)user * (int)K + i];
-        //cout << "user factor:" << user_factor << "\n";
-        // update the user factor in the user values array
-        user_values[(int)user * (int)K + i] +=
-        	GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
-    }
-    
-    // update the neighbors factors
-    double y_factor;
-    int movie_neighbor;
-    double size = neighborhood_sizes[(int)user];
-    double update;
-    for (int i = 0; i < size; i++)
-    {
-        movie_neighbor = neighborhoods[(int)user * MAX_NEIGHBOR_SIZE + i];
-        for(int j = 0; j < K; j++)
+        // get the neighborhood size for this user
+        size = neighborhood_sizes[userId];
+        // get the sum of neighborhood vectors for this user
+        get_y_sum(userId, y_sum_im);
+        // set y_sum_old equal to y_sum_im
+        for (i = 0; i < K; i++)
         {
-            y_factor = y[movie_neighbor * (int)K + j];
-            movie_factor = movie_values[(int)movie * (int)K + j];
-            update = 
-                GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
-            y[movie_neighbor * (int)K + j] += update;
-            y_sum[j] += update;
+            y_sum_old[i] = y_sum_im[i];
+        }
+
+        // this goes through all the training samples associated with a user
+        while (ratings[pt_index * POINT_SIZE] == userId)
+        {
+            itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
+            rating = ratings[pt_index * POINT_SIZE + 3];
+            // get the point error
+            point_error = rating - predict_rating(userId, itemId, y_sum_im);
+            for (i = 0; i < K; i++)
+            {
+                // update the movie and user factors 
+                movie_factor = movie_values[itemId * (int)K + i];
+                user_factor = user_values[userId * (int)K + i];
+
+                movie_values[itemId * (int)K + i] += 
+                    GAMMA_2 * (point_error * (user_factor + y_sum_im[i]) - LAMBDA_7 * movie_factor);
+                user_values[userId * (int)K + i] +=
+                    GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
+
+                // update y_sum_im
+                if(size != 0)
+                {
+                    y_sum_im[i] += 
+                        GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_sum_im[i]);
+                }            
+            }
+            // update the pt_index to the next point
+            pt_index++;
+        }
+
+        // update they y_values using the y_sum_im and y_sum_old vectors
+        for (i = 0; i < size; i++)
+        {
+            // the movie neighbor
+            itemId = neighborhoods[userId * MAX_NEIGHBOR_SIZE + i];
+            for (int j = 0; j < K; j++)
+            {
+                double tmp_y = y[itemId * (int)K + j];
+                y[itemId * (int)K + j] += y_sum_im[j] - y_sum_old[j];
+            }
         }
     }
+    delete [] y_sum_im;
+    delete [] y_sum_old;
 }
 
 /*
@@ -300,47 +327,9 @@ inline void train(double user, double movie, double date, double rating, double 
 inline void run_epoch()
 {
     cout << "Running an epoch.\n";
-    double prev_user = 1;
-   	double user;
-   	double movie;
-   	double date;
-   	double rating;
-    double * y_sum = new double[(int)K]();
-    get_y_sum(prev_user, y_sum);
-   	
-    for (int i = 0; i < num_pts; i++) {
-
-    	// trains only on point set one; change this line if you want to train
-        // on additional points
-        if (indices[i] == 1)
-        {
-            user = ratings[i * POINT_SIZE];
-            if (user != prev_user)
-            {
-                prev_user = user;
-                // reset the y sum to zero because the get_y_sum fucntion 
-                // expects an array of zeros
-                for (int j = 0; j < K; j++)
-                {
-                    y_sum[j] = 0;
-                }
-                // get the new y sum
-                get_y_sum(user, y_sum);
-            }
-            movie = ratings[i * POINT_SIZE + 1];
-            date = ratings[i * POINT_SIZE + 2];
-            rating = ratings[i * POINT_SIZE + 3];
-            train(user, movie, date, rating, y_sum);
-        }
-        if (i%1000000 == 0)
-        {
-            cout << "i: " << i << "\n";
-        }
-    }
+    train();
     // decrease gamma_2 by 10%, as suggested in paper
     GAMMA_2 = 0.9 * GAMMA_2;
-
-    delete [] y_sum;
 }
 
 /*
@@ -403,7 +392,7 @@ int main()
     int counter = 1;
 
     cout << "The starting error is: " << finalError << "\n";
-    while (initialError - finalError > STOPPING_CONDITION && counter <= MAX_EPOCHS) {
+    while (counter <= MAX_EPOCHS) {
         cout << "Starting Epoch " << counter << "\n";
         counter++;
         initialError = finalError;
