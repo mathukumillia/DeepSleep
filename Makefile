@@ -2,11 +2,13 @@ CPP = g++
 CPPFLAGS = -c -g -O3
 LDFLAGS = -lm
 
-SVD++: SVD++.o
+SVD++: optimized_SVD++.o
 	$(CPP) $(LDFLAGS) $^ -o $@
 
-SVD++.o: SVD++.cpp
+SVD++.o: optimized_SVD++.cpp
 	$(CPP) $(CPPFLAGS) $^ -o $@
+
+optimized_SVD++.cpp: baselinePrediction.h
 
 naive_SVD: optimized_SVD.o
 	$(CPP) $(LDFLAGS) $^ -o $@

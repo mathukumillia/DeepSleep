@@ -22,11 +22,9 @@ const double num_movies = 17770;
 const double num_pts = 102416306;
 
 // K is the constant representing the number of features
-// lrate is the learning rate
-// gamma_2 is a step size that gets altered and is thus not constant
+// gamma_2 is the step size
 const double K = 5;
-const double lrate = 0.001;
-double gamma_2 = 0.007;
+double GAMMA_2 = 0.007;
 
 // though these are declared as single dimensional, I will use them as 2D arrays
 // to facilitate this, I will store the sizes of the arrays as well
@@ -68,15 +66,15 @@ inline void initialize()
     user_values = new double[user_values_size];
     for (int i = 0; i < user_values_size; i++)
     {
-        user_values[i] = 0.1 * (double)(rand() % 10) + 0.01; // arbitrary initial condition
+        user_values[i] = 0.1; // arbitrary initial condition
     }
 
     movie_values = new double[movie_values_size];
     y = new double[y_size];
     for (int i = 0; i < movie_values_size; i++)
     {
-        movie_values[i] = 0.1 * (double)(rand() % 10) + 0.01;
-        y[i] = 0.1 * (double)(rand() % 10) + 0.01; // this was an arbitrary initial condition
+        movie_values[i] = 0.1;
+        y[i] = 0.1; // this was an arbitrary initial condition
     }
 
     // create  the arrays that store the ratings input data and the indexes
@@ -133,16 +131,17 @@ inline void read_data()
 }
 
 /*
-* Calculate the vector combining user factors and neighborhood factors
-* this is p_u + |N(u)|^(-1/2) * sum of y's in neighborhood of u
-* when using this, remember to delete the allocated memory for the user vector
+* Get the sum of the neighborhood vectors for the given user
+* this is |N(u)|^(-1/2) * sum of y's in neighborhood of u
+* @return: a double array of the vector sum; make sure you delete the memory
+* allocated to this array when using this function
 */
-inline double* get_user_vector(int user, int movie)
+inline double * get_y_sum(int user)
 {
-    // stores the sum of user vectors
+	// stores the sum of user vectors
     // (all the y's in the users neighborhood plus the user factors)
     // initializes to 0 because it accumulates the other values
-    double * user_vector_sum = new double[(int)K]();
+    double * y_vector_sum = new double[(int)K]();
     // stores the movie for which we are obtaining y
     int neighborhood_movie;
     // loop through neighborhood and get sum of y vectors for each movie in 
@@ -155,66 +154,85 @@ inline double* get_user_vector(int user, int movie)
             // add the current neighborhood movies y vector to the user vector sum
             for (int j = 0; j < K; j++)
             {
-                user_vector_sum[j] += y[neighborhood_movie * (int)K + j];
+                y_vector_sum[j] += y[neighborhood_movie * (int)K + j];
             }
         }
-    }
-    // add the user factors to the neighborhood sum
-    // neighborhood sum must be divided by square root of neighborhood size 
-    // first
-    // then takes inner product of user vector and movie vector
-    if (neighborhood_sizes[user] > 0)
-    {
-        for (int i = 0; i < K; i++)
+        // loop through and divide each of the elements by the square root of 
+        // the neighborhood size
+		for (int i = 0; i < K; i++)
         {
-            user_vector_sum[i] = user_vector_sum[i]/sqrt(neighborhood_sizes[user]) + user_values[user * (int)K + i];
+            y_vector_sum[i] = y_vector_sum[i]/sqrt(neighborhood_sizes[user]);
         }
     }
-    else
-    {
-        for (int i = 0; i < K; i++)
-        {
-            user_vector_sum[i] = user_values[user * (int)K + i];
-        }
-    }
-    return user_vector_sum;
+    return y_vector_sum;
 }
 
-
 /*
-* Finds the predicted rating using the movie and the user vector sum that 
-* we found earlier
+* Predict the rating given a user and movie
 *
+* @return: the double rating
 */
-inline double predict_rating(int movie, double * user_vector_sum)
+inline double predict_rating(int user, int movie)
 {
-    double rating = 0;
+	// gets the sum of the neighborhood vectors 
+	double * user_vector = get_y_sum(user);
+
+	// add in the current user factors to the neighborhood sum
+	for (int i = 0; i < K; i++)
+	{
+		user_vector[i] = user_values[user * (int)K + i] + user_vector[i];
+	}
+
+	// compute the rating as a fu
+	double rating = 0;
     for (int i = 0; i < K; i++)
     {
-        rating += user_vector_sum[i] * movie_values[movie * (int)K + i];
+        rating += user_vector[i] * movie_values[movie * (int)K + i];
+    }
+
+    delete [] user_vector;
+    return rating;
+}
+
+/*
+* Predicts the rating given a user vector that has already been calculated
+*/
+inline double predict_rating(double * user_vector, int movie)
+{
+	// compute the rating as a fu
+	double rating = 0;
+    for (int i = 0; i < K; i++)
+    {
+        rating += user_vector[i] * movie_values[movie * (int)K + i];
     }
     return rating;
 }
 
 /*
-* Gets the total error of the SVD++ model on the set index provided
-* i.e., to get validation error, pass in set = 2
+* Get the error on a given set of points.
+* 	i.e. set 2 is the validation set
+*
+* @return: the double error
 */
-inline double error(int set)
+inline double error (int set)
 {
-    cout << "Calculating error.\n";
+	cout << "Calculating error.\n";
 
     double error = 0;
     double diff = 0;
-    double index;
     double points_in_set = 0;
+    int user; 
+    int movie;
+    double rating;
 
     for (int i = 0; i < num_pts; i++) {
-        index = indices[i];
 
-        if (index == set) {
-            double *user_vector_sum = get_user_vector((int)ratings[i * POINT_SIZE], (int)ratings[i * POINT_SIZE + 1]);
-            diff = ratings[i * POINT_SIZE + 3] - predict_rating((int)ratings[i * POINT_SIZE + 1], user_vector_sum);
+        user = (int)ratings[i * POINT_SIZE];
+        movie = (int)ratings[i * POINT_SIZE + 1];
+        rating = ratings[i * POINT_SIZE + 3];
+
+        if (indices[i] == set) {
+            diff = rating - predict_rating(user, movie);
             error += diff * diff;
             points_in_set += 1;
         }
@@ -230,24 +248,36 @@ inline double error(int set)
 */
 inline void train(double user, double movie, double date, double rating)
 {
-    double * user_vector_sum = get_user_vector((int)user, (int)movie);
-    double point_error = rating - predict_rating((int)movie, user_vector_sum);
+	// get the sum of the neighborhood vectors
+	double * user_vector = get_y_sum((int)user);
 
-    // update the movie and user factors 
+	// add the values of the user factors to these neighborhood values
+	for (int i = 0; i < K; i++)
+	{
+		user_vector[i] = user_values[(int)user * (int)K + i] + user_vector[i];
+	}
+
+	double point_error = rating - predict_rating(user_vector, (int)movie);
+
+	// update the movie and user factors 
     double movie_factor;
     double user_factor;
     for (int i = 0; i < K; i++)
     {
         // stores the current factor that we are updating
         movie_factor = movie_values[(int)movie * (int)K + i];
+       // cout << "movie factor: " << movie_factor << "\n";
         // update the movie factor in the movie values array
-        movie_values[(int)movie * (int)K + i] = movie_factor + gamma_2 * (point_error * user_vector_sum[i] - LAMBDA_7 * movie_factor);
+        movie_values[(int)movie * (int)K + i] +=
+          GAMMA_2 * (point_error * user_vector[i] - LAMBDA_7 * movie_factor);
         // stores the current user factor
         user_factor = user_values[(int)user * (int)K + i];
+        //cout << "user factor:" << user_factor << "\n";
         // update the user factor in the user values array
-        user_values[(int)user * (int)K + i] = user_factor + gamma_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
+        user_values[(int)user * (int)K + i] +=
+        	GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
     }
-
+    
     // update the neighbors factors
     double y_factor;
     int movie_neighbor;
@@ -259,12 +289,12 @@ inline void train(double user, double movie, double date, double rating)
         {
             y_factor = y[movie_neighbor * (int)K + j];
             movie_factor = movie_values[(int)movie * (int)K + j];
-            y[movie_neighbor * (int)K + j] = y_factor + gamma_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
+            y[movie_neighbor * (int)K + j] += 
+            	GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
         }
     }
 
-    // delete the user_vector_sum because it was allocated in the get_user_vector
-    delete [] user_vector_sum;
+    delete [] user_vector;
 }
 
 /*
@@ -272,31 +302,33 @@ inline void train(double user, double movie, double date, double rating)
 */
 inline void run_epoch()
 {
-    cout << "Running Epoch." << "\n";
+    cout << "Running an epoch.\n";
+   	double user;
+   	double movie;
+   	double date;
+   	double rating;
+   	int pt;
+    for (int i = 0; i < num_pts; i++) {
 
-    int pt;
-    double index;
-	for (int i = 0; i < num_pts; i++) {
-
-        // select an arbitrary point to train with 
-        pt = rand() % (int)num_pts;
-		index = indices[pt];
-        // make sure the selected point is in the first data set
-        while (index != 1)
-        {
-            pt = rand() % (int)num_pts;
-            index = indices[pt];
-        }
-        // train with this point
-		train(ratings[i * POINT_SIZE], ratings[i * POINT_SIZE + 1], ratings[i * POINT_SIZE + 2], ratings[i * POINT_SIZE + 3]);
-
-		if (i%1000000 == 0)
+    	// trains only on point set one; change this line if you want to train
+        // on additional points
+    	pt = rand() % (int)num_pts;
+    	while (indices[pt] != 1)
+    	{
+    		pt = rand() % (int)num_pts;
+    	}
+    	user = ratings[pt * POINT_SIZE];
+    	movie = ratings[pt * POINT_SIZE + 1];
+    	date = ratings[pt * POINT_SIZE + 2];
+    	rating = ratings[pt * POINT_SIZE + 3];
+        train(user, movie, date, rating);
+        if (i%1000000 == 0)
         {
             cout << "i: " << i << "\n";
         }
-	}
-	gamma_2 = 0.9 * gamma_2;
-	cout << "Epoch complete." << "\n";
+    }
+    // decrease gamma_2 by 10%, as suggested in paper
+    GAMMA_2 = 0.9 * GAMMA_2;
 }
 
 /*
@@ -310,18 +342,22 @@ inline void findQualPredictions()
     ofstream outputFile;
     outputFile.open("SVD++_output.dta");
 
-    int index;
     double prediction;
     double * user_vector_sum;
+    int user;
+    int movie;
+    int date;
     for(int i = 0; i < num_pts; i++)
     {
-        index = indices[i];
-        if (index == 5)
+        if (indices[i] == 5)
         {
-            user_vector_sum = get_user_vector((int)ratings[i * POINT_SIZE], (int)ratings[i * POINT_SIZE + 1]);
-            // I have to add the ratings in the file because this ratings file has the baselines removed
-            // this rating is negative, so I must multiply by -1 first
-            prediction = baselinePrediction((int)ratings[i * POINT_SIZE], (int)ratings[i * POINT_SIZE + 1], (int)ratings[i * POINT_SIZE + 2]) + predict_rating((int)ratings[i * POINT_SIZE + 1], user_vector_sum);
+        	user = (int)ratings[i * POINT_SIZE];
+        	movie = (int)ratings[i * POINT_SIZE + 1];
+        	date = (int)ratings[i * POINT_SIZE + 2];
+            // I have to add the ratings in the file because this ratings file
+            // has the baselines removed
+            prediction = 
+            	baselinePrediction(user, movie, date) + predict_rating(user, movie);
             if (prediction < 1)
             {
                 prediction = 1;
@@ -331,7 +367,6 @@ inline void findQualPredictions()
                 prediction = 5;
             }
             outputFile << prediction << "\n";
-            delete [] user_vector_sum;
         }
     }
 }
@@ -361,4 +396,3 @@ int main()
     clean_up();
     return 0;
 }
-
