@@ -23,7 +23,7 @@ const double num_pts = 102416306;
 
 // K is the constant representing the number of features
 // gamma_2 is the step size
-const double K = 30;
+const double K = 50;
 double GAMMA_2 = 0.007;
 
 // though these are declared as single dimensional, I will use them as 2D arrays
@@ -387,19 +387,17 @@ int main()
     initialize();
     read_data();
 
-    double initialError = 100000;
-    double finalError = error(2); // gets the validation error before training
+    double finalError;
     int counter = 1;
 
     cout << "The starting error is: " << finalError << "\n";
     while (counter <= MAX_EPOCHS) {
         cout << "Starting Epoch " << counter << "\n";
-        counter++;
-        initialError = finalError;
         run_epoch();
-        finalError = error(2); // error(2) returns the validation error
-        cout << "Error after Epoch " << counter << ": " << finalError << "\n";
+        counter++;
     }
+    finalError = error(2); // error(2) returns the validation error
+    cout << "Final validation error: " << finalError << "\n";
 
     // find the values on the qual set
     findQualPredictions();
