@@ -23,7 +23,7 @@ const double num_pts = 102416306;
 
 // K is the constant representing the number of features
 // gamma_2 is the step size
-const double K = 30;
+const double K = 5;
 double GAMMA_2 = 0.007;
 
 // though these are declared as single dimensional, I will use them as 2D arrays
@@ -66,15 +66,15 @@ inline void initialize()
     user_values = new double[user_values_size];
     for (int i = 0; i < user_values_size; i++)
     {
-        user_values[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);; // arbitrary initial condition
+        user_values[i] = 0.1; // arbitrary initial condition
     }
 
     movie_values = new double[movie_values_size];
     y = new double[y_size];
     for (int i = 0; i < movie_values_size; i++)
     {
-        movie_values[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);;
-        y[i] = 0.0; // this was an arbitrary initial condition
+        movie_values[i] = 0.1;
+        y[i] = 0.1; // this was an arbitrary initial condition
     }
 
     // create  the arrays that store the ratings input data and the indexes
@@ -133,11 +133,15 @@ inline void read_data()
 /*
 * Get the sum of the neighborhood vectors for the given user
 * this is |N(u)|^(-1/2) * sum of y's in neighborhood of u
-* takes in a pointer to an array of all 0s to which it can store the result
+* @return: a double array of the vector sum; make sure you delete the memory
 * allocated to this array when using this function
 */
-inline void get_y_sum(int user, double * y_vector_sum)
+inline double * get_y_sum(int user)
 {
+	// stores the sum of user vectors
+    // (all the y's in the users neighborhood plus the user factors)
+    // initializes to 0 because it accumulates the other values
+    double * y_vector_sum = new double[(int)K]();
     // stores the movie for which we are obtaining y
     int neighborhood_movie;
     // loop through neighborhood and get sum of y vectors for each movie in 
@@ -160,6 +164,7 @@ inline void get_y_sum(int user, double * y_vector_sum)
             y_vector_sum[i] = y_vector_sum[i]/sqrt(neighborhood_sizes[user]);
         }
     }
+    return y_vector_sum;
 }
 
 /*
@@ -170,8 +175,7 @@ inline void get_y_sum(int user, double * y_vector_sum)
 inline double predict_rating(int user, int movie)
 {
 	// gets the sum of the neighborhood vectors 
-	double * user_vector = new double[(int)K]();
-    get_y_sum(user, user_vector);
+	double * user_vector = get_y_sum(user);
 
 	// add in the current user factors to the neighborhood sum
 	for (int i = 0; i < K; i++)
@@ -238,60 +242,13 @@ inline double error (int set)
 }
 
 /*
-* Trains the SVD++ model on one provided point
-* Point must contain the user, movie, date, and rating
-* also takes in y_sum, which just contains the sum of the y's in the 
-* neighborhood 
-* utilizes SGD
+* function to train the SVD; takes in a user and a movie index, along with 
+* a rating 
+*
 */
-inline void train(double user, double movie, double date, double rating, double * y_sum)
+inline void train(double user, double movie, double date, double rating)
 {
-    double user_vector[(int)K] = {};
-	// add the values of the user factors to these neighborhood values
-	for (int i = 0; i < K; i++)
-	{
-		user_vector[i] = user_values[(int)user * (int)K + i] + y_sum[i];
-	}
 
-	double point_error = rating - predict_rating(user_vector, (int)movie);
-
-	// update the movie and user factors 
-    double movie_factor;
-    double user_factor;
-    for (int i = 0; i < K; i++)
-    {
-        // stores the current factor that we are updating
-        movie_factor = movie_values[(int)movie * (int)K + i];
-       // cout << "movie factor: " << movie_factor << "\n";
-        // update the movie factor in the movie values array
-        movie_values[(int)movie * (int)K + i] +=
-          GAMMA_2 * (point_error * user_vector[i] - LAMBDA_7 * movie_factor);
-        // stores the current user factor
-        user_factor = user_values[(int)user * (int)K + i];
-        //cout << "user factor:" << user_factor << "\n";
-        // update the user factor in the user values array
-        user_values[(int)user * (int)K + i] +=
-        	GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
-    }
-    
-    // update the neighbors factors
-    double y_factor;
-    int movie_neighbor;
-    double size = neighborhood_sizes[(int)user];
-    double update;
-    for (int i = 0; i < size; i++)
-    {
-        movie_neighbor = neighborhoods[(int)user * MAX_NEIGHBOR_SIZE + i];
-        for(int j = 0; j < K; j++)
-        {
-            y_factor = y[movie_neighbor * (int)K + j];
-            movie_factor = movie_values[(int)movie * (int)K + j];
-            update = 
-                GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
-            y[movie_neighbor * (int)K + j] += update;
-            y_sum[j] += update;
-        }
-    }
 }
 
 /*
@@ -300,47 +257,30 @@ inline void train(double user, double movie, double date, double rating, double 
 inline void run_epoch()
 {
     cout << "Running an epoch.\n";
-    double prev_user = 1;
-   	double user;
-   	double movie;
-   	double date;
-   	double rating;
-    double * y_sum = new double[(int)K]();
-    get_y_sum(prev_user, y_sum);
-   	
+    double user;
+    double movie;
+    double date;
+    double rating;
+    
     for (int i = 0; i < num_pts; i++) {
 
-    	// trains only on point set one; change this line if you want to train
+        // trains only on point set one; change this line if you want to train
         // on additional points
         if (indices[i] == 1)
         {
             user = ratings[i * POINT_SIZE];
-            if (user != prev_user)
-            {
-                prev_user = user;
-                // reset the y sum to zero because the get_y_sum fucntion 
-                // expects an array of zeros
-                for (int j = 0; j < K; j++)
-                {
-                    y_sum[j] = 0;
-                }
-                // get the new y sum
-                get_y_sum(user, y_sum);
-            }
             movie = ratings[i * POINT_SIZE + 1];
             date = ratings[i * POINT_SIZE + 2];
-            rating = ratings[i * POINT_SIZE + 3];
-            train(user, movie, date, rating, y_sum);
-        }
-        if (i%1000000 == 0)
-        {
-            cout << "i: " << i << "\n";
+            rating = ratings[i* POINT_SIZE + 3];
+            train(user, movie, date, rating);
+            if (i%1000000 == 0)
+            {
+                cout << "i: " << i << "\n";
+            }
         }
     }
     // decrease gamma_2 by 10%, as suggested in paper
     GAMMA_2 = 0.9 * GAMMA_2;
-
-    delete [] y_sum;
 }
 
 /*
@@ -348,13 +288,13 @@ inline void run_epoch()
 * fix this to work with baseline removed predictions
 *
 */
-inline void findQualPredictions()
+inline void find_qual_predictions()
 {
     cout << "Finding and writing qual predictions.\n";
     ofstream outputFile;
     ofstream probeFile;
-    outputFile.open("SVD++_qual_output.dta");
-    probeFile.open("SVD++_probe_output.dta");
+    outputFile.open("SVD++_output.dta");
+    probeFile.open("SVD++_probe.dta");
 
     double prediction;
     int user;
@@ -364,13 +304,13 @@ inline void findQualPredictions()
     {
         if (indices[i] == 5 || indices[i] == 4)
         {
-        	user = (int)ratings[i * POINT_SIZE];
-        	movie = (int)ratings[i * POINT_SIZE + 1];
-        	date = (int)ratings[i * POINT_SIZE + 2];
+            user = (int)ratings[i * POINT_SIZE];
+            movie = (int)ratings[i * POINT_SIZE + 1];
+            date = (int)ratings[i * POINT_SIZE + 2];
             // I have to add the ratings in the file because this ratings file
             // has the baselines removed
             prediction = 
-            	baselinePrediction(user, movie, date) + predict_rating(user, movie);
+                baselinePrediction(user, movie, date) + predict_rating(user, movie);
             if (prediction < 1)
             {
                 prediction = 1;
@@ -383,8 +323,8 @@ inline void findQualPredictions()
             {
                 outputFile << prediction << "\n";
             }
-            else if(indices[i] == 4)
-            {
+            else
+            {  
                 probeFile << prediction << "\n";
             }
         }
@@ -413,7 +353,7 @@ int main()
     }
 
     // find the values on the qual set
-    findQualPredictions();
+    find_qual_predictions();
 
     clean_up();
     return 0;
