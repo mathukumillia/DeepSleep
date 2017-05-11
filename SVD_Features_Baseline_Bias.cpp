@@ -5,12 +5,13 @@
 #include <math.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <limits>
 #include "baselinePrediction.h"
 using namespace std;
 
 // a point looks like (user, movie, date, rating)
 #define POINT_SIZE 4 // the size of a single input point in the training data
-#define STOPPING_CONDITION 0
+#define STOPPING_CONDITION -1 // set to -1 for now in order to force MAX_EPOCHS to control the stopping condition
 #define MAX_EPOCHS 20
 
 // these are all the global variables used by the program
@@ -68,13 +69,13 @@ inline void initialize()
     user_values = new double[user_values_size];
     for (int i = 0; i < user_values_size; i++)
     {
-        user_values[i] = 0.1 * (double)(rand() % 10) + 0.01; // arbitrary initial condition
+        user_values[i] = 0.1/pow(K,0.5) * (double)(rand() % 10) - 0.5/pow(K,0.5); // arbitrary initial condition centered around zero and magnitude-normalized by K
     }
 
     movie_values = new double[movie_values_size];
     for (int i = 0; i < movie_values_size; i++)
     {
-        movie_values[i] = 0.1 * (double)(rand() % 10) + 0.01;
+        movie_values[i] = 0.1/pow(K,0.5) * (double)(rand() % 10) - 0.5/pow(K,0.5); // arbitrary intial condition centered around zero and magnitude-normalized by K
     }
 
     // create  the arrays that store the ratings input data and the indexes
@@ -84,13 +85,13 @@ inline void initialize()
     user_biases = new double [user_biases_size];
     for (int i = 0; i < user_biases_size; ++i)
     {
-        user_biases[i] = 0.1 * (double)(rand() % 10) + 0.01; // arbitrary initial condition
+        user_biases[i] = 0.1/pow(K,0.5) * (double)(rand() % 10) - 0.5/pow(K,0.5); // arbitrary initial condition centered around zero and magnitude-normalized (unnecessarily) by K
     }
 
     movie_biases = new double [movie_biases_size];
     for (int i = 0; i < movie_biases_size; ++i)
     {
-        movie_biases[i] = 0.1 * (double)(rand() % 10) + 0.01; // arbitrary initial condition
+        movie_biases[i] = 0.1/pow(K,0.5) * (double)(rand() % 10) - 0.5/pow(K,0.5); // arbitrary initial condition centered around zero and magnitude-normalized (unnecessarily) by K
     }
 
     cout << "Done allocating memory.\n";
@@ -108,7 +109,6 @@ inline void read_data()
     ratings_file.read((char *)(ratings), sizeof(double) * num_pts * POINT_SIZE);
     ratings_file.close();
 
-    // read in index data
     fstream indices_file("indices.bin", ios::in | ios::binary);
     indices_file.read((char *)(indices), sizeof(double) * num_pts);
     indices_file.close();
@@ -121,8 +121,8 @@ inline void readRatingsIndexes()
     cout << "Note to user: Make sure the input file paths are correct.\n";
     // read in data
     // change file paths as necessary
-    fstream ratingsFile ("../../Caltech/CS156B/um/all.dta");
-    fstream indexFile ("../../Caltech/CS156B/um/all.idx");
+    fstream ratingsFile ("all.dta");
+    fstream indexFile ("all.idx");
     // user, movie, date, rating
     double inputs [4] = {};
     int index = 0;
@@ -192,15 +192,10 @@ inline double error(int set)
             int movie = (int)ratings[i * POINT_SIZE + 1];
             double rating = ratings[i * POINT_SIZE + 3];
             double prediction = user_biases[user] + movie_biases[movie] + predict_rating(user, movie);
-            //cout << "prediction: " << prediction << "\n";
-            //cout << "rating: " << rating << "\n";
 
             diff = rating - prediction;
             error += diff * diff;
 
-            //cout << "diff^2: " << diff * diff << "\n";
-            //cout << "error: " << error << "\n";
-            //cout << "pt: " << i << "\n";
             double inf = std::numeric_limits<double>::infinity();
 
             if(error >= inf){
@@ -297,6 +292,41 @@ inline void find_qual_predictions()
   }
 }
 
+inline void find_probe_predictions()
+{
+  ofstream probeOutputFile;
+  probeOutputFile.open("SVD_bias_probeOutput.dta");
+
+  double index;
+  double prediction;
+
+  int user;
+  int movie;
+  int date;
+  for(int i = 0; i < num_pts; i++)
+  {
+      index = indices[i];
+      // the probe set is set 4
+      if (index == 4)
+      {
+        user = (int)ratings[i * POINT_SIZE];
+        movie = (int)ratings[i * POINT_SIZE + 1];
+        date = (int)ratings[i * POINT_SIZE + 2];
+          prediction = baselinePrediction(user, movie, date) + predict_rating(user, movie)
+              + user_biases[user] + movie_biases[movie];
+          if (prediction < 1)
+          {
+              prediction = 1;
+          }
+          if (prediction > 5)
+          {
+              prediction = 5;
+          }
+          probeOutputFile << prediction << "\n";
+      }
+  }
+}
+
 inline void storeUserFeatures()
 {
     cout << "storing user features" << "\n";
@@ -360,6 +390,9 @@ int main()
     
     // find the values on the qual set
     find_qual_predictions();
+
+    // find the values on the probe set
+    find_probe_predictions();
 
     clean_up();
     return 0;
