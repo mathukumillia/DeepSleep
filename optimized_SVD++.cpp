@@ -12,7 +12,7 @@
 #define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
 #define LAMBDA_7 0.015 // obtained from the SVD++ paper
 #define LAMBDA_6 0.005 // from paper
-#define DECAY 0.9 // from paper
+#define DECAY 0.975 // from paper
 
 using namespace std;
 
@@ -25,9 +25,11 @@ const double num_pts = 102416306;
 
 // K is the constant representing the number of features
 // gamma_2 is the step size
-const double K = 100;
+const double K = 75;
 double GAMMA_2 = 0.007;
 double GAMMA_1 = 0.007;
+// the mean rating with the baselines removed in point set 1
+const double baseline_removed_mean = 0.00199931;
 
 // though these are declared as single dimensional, I will use them as 2D arrays
 // to facilitate this, I will store the sizes of the arrays as well
@@ -211,6 +213,9 @@ inline double predict_rating(int user, int movie)
     rating += user_biases[user];
     rating += movie_biases[movie];
 
+    // add in the mean
+    rating += baseline_removed_mean;
+
     delete [] user_vector;
     return rating;
 }
@@ -234,6 +239,9 @@ inline double predict_rating(int user, int movie, double * y_sum)
     // add in the user and movie biases
     rating += user_biases[user];
     rating += movie_biases[movie];
+
+    // add in the mean
+    rating += baseline_removed_mean;
     return rating;
 }
 
@@ -288,7 +296,7 @@ inline void train()
     double point_error;
     double movie_factor;
     double user_factor;
-    // neighborhood
+    // neighborhood size
     double size; 
 
     // iterates through the users
@@ -307,6 +315,7 @@ inline void train()
         // this goes through all the training samples associated with a user
         while (ratings[pt_index * POINT_SIZE] == userId)
         {
+            // only train if this is in the training set 
             if (indices[pt_index] == 1)
             {
                 itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
@@ -346,7 +355,6 @@ inline void train()
             itemId = neighborhoods[userId * MAX_NEIGHBOR_SIZE + i];
             for (int j = 0; j < K; j++)
             {
-                double tmp_y = y[itemId * (int)K + j];
                 y[itemId * (int)K + j] += y_sum_im[j] - y_sum_old[j];
             }
         }
@@ -421,7 +429,6 @@ int main()
 {
     initialize();
     read_data();
-
     double finalError;
     int counter = 1;
 
@@ -429,11 +436,13 @@ int main()
     while (counter <= MAX_EPOCHS) {
         cout << "Starting Epoch " << counter << "\n";
         run_epoch();
-        finalError = error(2);
-        cout << "Error after Epoch " << counter << ": " << finalError << "\n";
+        if (counter % 5 == 0)
+        {
+            finalError = error(2);
+            cout << "Error after " << counter << " epochs: " << finalError << "\n";
+        }
         counter++;
     }
-    finalError = error(2); // error(2) returns the validation error
     cout << "Final validation error: " << finalError << "\n";
 
     // find the values on the qual set
