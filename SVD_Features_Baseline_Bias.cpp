@@ -19,12 +19,12 @@ using namespace std;
 const int num_users = 458293;
 const int num_movies = 17770;
 const int num_pts = 102416306;
-const double lambda = 0.02;
+const double lambda = 0.001;
 
 // K is the constant representing the number of features
 // lrate is the learning rate
 const int K = 50;
-const double lrate = 0.005;
+const double lrate = 0.01;
 const double global_mean = 3.6033;
 
 // these 2D arrays are the U and V in the SVD
@@ -262,10 +262,12 @@ inline void run_epoch (int feature)
   cout << "Epoch complete." << "\n";
 }
 
-inline void find_qual_predictions()
+inline void find_predictions()
 {
-  ofstream outputFile;
-  outputFile.open("SVD_bias_output.dta");
+  ofstream probeFile;
+  ofstream qualFile;
+  probeFile.open("SVD_bias_probe_predictions.dta");
+  qualFile.open("SVD_bias_qual_predictions.dta");
 
   double index;
   double prediction;
@@ -273,11 +275,12 @@ inline void find_qual_predictions()
   int user;
   int movie;
   int date;
+
   for(int i = 0; i < num_pts; i++)
   {
       index = indices[i];
-      // the qual set is set 5
-      if (index == 5)
+      // the qual set is set 5, probe set is 4
+      if (index == 4 || index == 5)
       {
         user = (int)ratings[i * POINT_SIZE];
         movie = (int)ratings[i * POINT_SIZE + 1];
@@ -292,7 +295,16 @@ inline void find_qual_predictions()
           {
               prediction = 5;
           }
-          outputFile << prediction << "\n";
+      }
+
+      // probe
+      if(index == 4){
+        probeFile << prediction << "\n";
+      }
+
+      // qual
+      if(index == 5){
+        qualFile << prediction << "\n";
       }
   }
 }
@@ -359,7 +371,7 @@ int main()
     }
     
     // find the values on the qual set
-    find_qual_predictions();
+    find_predictions();
 
     clean_up();
     return 0;
