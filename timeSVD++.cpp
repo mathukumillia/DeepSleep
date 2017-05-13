@@ -5,7 +5,8 @@
 #include <cmath>
 #include <map>
 #include <vector>
-#include "baselinePrediction.h"
+#include <stdlib.h>
+#include <algorithm>
 
 // a point looks like (user, movie, date, rating)
 #define POINT_SIZE 4 // the size of a single input point in the training data
@@ -13,7 +14,6 @@
 #define MAX_EPOCHS 40 // the maximum number of epochs to run; 30 in the paper
 #define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
 #define LAMBDA_7 0.015 // obtained from the SVD++ paper
-#define LAMBDA_6 0.005 // from SVD++ paper
 #define LAMBDA_A 50 // from belkor paper 
 #define BETA 0.4 // from timeSVD++ paper
 #define DECAY 0.9 
@@ -21,7 +21,9 @@
 
 using namespace std;
 
-// these are all the global variables used by the program
+/*
+* These are all the global variables used by the program
+*/
 
 // users and movies are one indexed
 const double num_users = 458293;
@@ -29,14 +31,11 @@ const double num_movies = 17770;
 const double num_pts = 102416306;
 
 // K is the constant representing the number of features
-// gamma_2 is the step size
+// gamma_2 is the step size         
 const double K = 50;
 double GAMMA_2 = 0.008;
-double GAMMA_1 = 0.008;
 // alpha step size; got default from timeSVD++ repo online
 double GAMMA_A = 0.00001;
-// the mean rating with the baselines removed in point set 1
-const double baseline_removed_mean = 0.00199931;
 
 // though these are declared as single dimensional, I will use them as 2D arrays
 // to facilitate this, I will store the sizes of the arrays as well
@@ -69,7 +68,7 @@ int y_size = (int) ((num_movies + 1) * K);
 // is one indexed
 double * t_u;
 
-// 2D array that stores the alpha value for each user factor
+// 2D array that stores the alpha value for each user FACTOR for SVD
 double * alphas;
 int alphas_size = (int) ((num_users + 1) * K);
 
@@ -79,10 +78,70 @@ vector< map<int, double> > dev_results;
 // boolean to enable debugging messages 
 bool DEBUG = false;
 
+/*
+* Global variables for baseline prediction
+*   Most of the code for this part came from kenny's code
+*/
 
-// the basic user and movie bias arrays
+// the mean rating in point set 1
+const double mean_rating = 3.60861;
+
+// this value is taken from BellKor paper
+const int num_time_bins = 30;
+
+// the maximum time value in the data
+const int max_time = 2243;
+
+// the size of a single bin
+// add 1 to make sure we round up and not down
+int binsize = max_time/num_time_bins + 1;
+
+// vector to store data from base set
+vector<int> timeBins;
+
+// stores the naive user bias term
 double * user_biases;
+// stores the naive movie biase term 
 double * movie_biases;
+
+// stores the alpha values that influence the user bias
+double * bias_alphas;
+
+// store the single day variables for user bias
+// index in vector represents user (one indexed as usual)
+// each int in the map is a date
+// the double is the actual bias term 
+vector<map<int, double> > Bu_t;
+
+// store the bin bias terms 
+// stored in a 2D array because this is way too wide to store in one chunk
+double ** Bi_bin;
+
+// store the stable c_u terms
+double * c_u;
+
+// store the time dependent c_ut terms
+// set up very similarly to Bu_t
+vector<map<int, double> > c_ut;
+
+// set learning rates and regularizers for all variables to be learned
+// these values are taken from BellKor paper
+double learningRateBu = 0.00267;
+double learningRateBi = 0.00048;
+double learningRateBiBin = 0.000115;
+double learningRateAu = 0.00000311;
+double learningRateBut = 0.00257;
+double learningRateCu = 0.00564;
+double learningRateCut = 0.00103;
+double learningRateBifui = 0.00236; 
+double regularizerBu = 0.0255;
+double regularizerBi = 0.0255;
+double regularizerBiBin = 0.0929;
+double regularizerAu = 3.95;
+double regularizerBut = 0.00231;
+double regularizerCu = 0.0476;
+double regularizerCut = 0.0190;
+double regularizerBifui = 0.000000011;
 
 /*
 * Allocates memory and initializes user, movie, ratings, and indices arrays
@@ -123,24 +182,39 @@ inline void initialize()
         alphas[i] =  0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);
     }
 
-    // allocate the dev results and initialize all of the values to 0
+    // initialize the naive user biases
+    user_biases = new double[(int)num_users + 1];
+    // initialize the user bias alpha values
+    bias_alphas = new double[(int)num_users + 1];
+    // initialize the c_u values
+    c_u = new double[(int)num_users + 1];
+    // allocate the dev results and initialize all of the values
     for (int i = 0; i < num_users + 1; i++)
     {
         map<int,double> tmp;
-        dev_results.push_back(tmp);
+        dev_results.push_back(tmp); 
+        // initialize the naive user biases 
+        user_biases[i] = 0.0;
+        bias_alphas[i] = 0.0;
+        c_u[i] = 1.0;
     }
 
-    // initialize the user and movie biases
-    user_biases = new double[(int)num_users + 1];
-    for (int i = 0; i < num_users + 1; i++)
-    {
-        user_biases[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);
-    }
-
+    // initialize the naive movie biases
     movie_biases = new double[(int)num_movies + 1];
+    // initialize the bins of time for the movies; again, this is 1 indexed,
+    // hence the +1
+    Bi_bin = new double* [(int)num_movies + 1];
     for (int i = 0; i < num_movies + 1; i++)
     {
-        movie_biases[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K); 
+        // initialize the naive movie biases
+        movie_biases[i] = 0;
+        Bi_bin[i] = new double[num_time_bins];
+
+        // initialize the bin biases to 0
+        for (int j = 0; j < num_time_bins; j++)
+        {
+            Bi_bin[i][j] = 0.0;
+        }
     }
 
     cout << "Done allocating memory.\n";
@@ -161,6 +235,15 @@ inline void clean_up()
     delete [] y;
     delete [] t_u;
     delete [] alphas;
+    delete [] user_biases;
+    delete [] movie_biases;
+    for(int i = 0; i < num_movies + 1; i++)
+    {
+        delete [] Bi_bin[i];
+    }
+    delete [] Bi_bin;
+    delete [] bias_alphas;
+    delete [] c_u;
 }
 
 /*
@@ -169,8 +252,8 @@ inline void clean_up()
 inline void read_data()
 {
     cout << "Reading in training data.\n";
-    // read in ratings data - currently, this is training without the baseline
-    fstream ratings_file("../ratings_baseline_removed.bin", ios::in | ios::binary);
+    // read in ratings data
+    fstream ratings_file("../ratings.bin", ios::in | ios::binary);
     ratings_file.read(reinterpret_cast<char *>(ratings), sizeof(double) * num_pts * POINT_SIZE);
     ratings_file.close();
 
@@ -193,6 +276,46 @@ inline void read_data()
     fstream t_file("../average_time_rating.bin", ios::in | ios::binary);
     t_file.read(reinterpret_cast<char *>(t_u), sizeof(double) * (num_users + 1));
     t_file.close();
+}
+
+/*
+* Initializes the Bu_t bias vector and c_ut scaling vector
+*
+*/
+inline void init_time_bias()
+{
+    cout << "Initializing Bu_t and c_ut.\n";
+    // create the map for each user
+    for (int i = 0; i < num_users + 1; i++)
+    {
+        // insert maps into Bu_t
+        map<int, double> tmp;
+        Bu_t.push_back(tmp);
+        // insert maps into c_ut
+        map<int, double> tmp2;
+        c_ut.push_back(tmp2);
+    }
+    int user;
+    int date; 
+    // loop through training (set 1) data and insert into the map as needed
+    for (int i = 0; i < num_pts; i++)
+    {
+        if(indices[i] == 1)
+        {
+            user = (int)ratings[i * POINT_SIZE];
+            date = (int)ratings[i * POINT_SIZE + 2];
+            // if the current user and date haven't been initialized, 
+            // initialize the pair
+            if (Bu_t[user].count(date) == 0)
+            {
+                Bu_t[user][date] = 0.0000001;
+            }
+            if (c_ut[user].count(date) == 0)
+            {
+                c_ut[user][date] = 0.0000001;
+            }
+        }
+    }
 }
 
 /*
@@ -279,12 +402,14 @@ inline double predict_rating(int user, int movie, double date)
         rating += user_vector[i] * movie_values[movie * (int)K + i];
     }
 
-    // add in the user and movie biases
-    rating += user_biases[user];
-    rating += movie_biases[movie];
+    // add in the user biases
+    rating += user_biases[user] + bias_alphas[user] * dev(user, date) + Bu_t[user][(int)date];
 
-    // add in the mean
-    rating += baseline_removed_mean;
+    // add in the movie biases multiplied by the scaling factors
+    rating += (movie_biases[movie] + Bi_bin[movie][(int)date/binsize]) * (c_u[user] + c_ut[user][(int)date]);
+
+    // add in the overall mean
+    rating += mean_rating;
 
     delete [] user_vector;
     return rating;
@@ -308,12 +433,14 @@ inline double predict_rating(int user, int movie, double date, double * y_sum)
         rating += user_vector[i] * movie_values[movie * (int)K + i];
     }
 
-    // add in the user and movie biases
-    rating += user_biases[user];
-    rating += movie_biases[movie];
+    // add in the user biases
+    rating += user_biases[user] + bias_alphas[user] * dev(user, date) + Bu_t[user][(int)date];
 
-    // add in the mean
-    rating += baseline_removed_mean;
+    // add in the movie biases multiplied by the scaling factors
+    rating += (movie_biases[movie] + Bi_bin[movie][(int)date/binsize]) * (c_u[user] + c_ut[user][(int)date]);
+
+    // add in the overall mean
+    rating += mean_rating;
 
     return rating;
 }
@@ -376,6 +503,8 @@ inline void train()
     // neighborhood size
     double size; 
     double dev_val;
+    double old_bin_val;
+    double old_movie_val;
 
     // iterates through the users
     for (userId = 1; userId < num_users; userId++)
@@ -396,12 +525,14 @@ inline void train()
             // only train if this is in the training set 
             if (indices[pt_index] == 1)
             {
+                // store some things to make referring to them easier
                 itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
                 date = ratings[pt_index * POINT_SIZE + 2];
                 rating = ratings[pt_index * POINT_SIZE + 3];
                 dev_val = dev(userId, date);
                 // get the point error
                 point_error = rating - predict_rating(userId, itemId, date, y_sum_im);
+                // update all of the SVD factors including, p, q, y, and alpha
                 for (i = 0; i < K; i++)
                 {
                     // update the movie, user, and alpha factors 
@@ -420,29 +551,42 @@ inline void train()
                         y_sum_im[i] += 
                             GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_sum_im[i]);
                     }   
-
-                    // update the alpha factor for this user
-                    // if(pt_index <= 1)
-                    //     DEBUG = true; 
-                    // else
-                    //     DEBUG = false;
-                    // if (DEBUG){
-                        // cout << "alpha factor to start: " << alphas[userId * (int)K + i] << "\n";
-                        // cout << "point error: " << point_error << "\n";
-                        // cout << "dev value: " << dev_val << "\n";
-                    // }
-
                     alphas[userId * (int)K + i] += 
                         GAMMA_A * (point_error * (movie_factor * dev_val) - LAMBDA_A * alpha_factor); 
-                    // if(DEBUG){
-                    //     cout << "movie factor used in alpha update: " << movie_factor << "\n";
-                    //     cout << "alpha factor post update: " << alphas[userId * (int)K + i] << "\n";
-                    // }
-
                 }
-                // update the user and movie biases
-                user_biases[userId] += GAMMA_1 * (point_error - LAMBDA_6 * user_biases[userId]);
-                movie_biases[itemId] += GAMMA_1 * (point_error - LAMBDA_6 * movie_biases[itemId]);
+
+                /*
+                * These next few lines update the baseline metrics
+                *
+                */
+                // update the naive user biases
+                user_biases[userId] += learningRateBu * (point_error - regularizerBu * user_biases[userId]);
+
+                // update the naive movie biases
+                old_movie_val = movie_biases[itemId];
+                movie_biases[itemId] += learningRateBi * (point_error - regularizerBi * old_movie_val);
+
+                // update the movie time bin bias term
+                old_bin_val =  Bi_bin[itemId][(int)date/binsize];
+                Bi_bin[itemId][(int)date/binsize] += 
+                    learningRateBiBin * (point_error - regularizerBiBin * old_bin_val);
+                
+                // update the user bias alphas
+                bias_alphas[userId] += 
+                    learningRateAu * (point_error * dev_val - regularizerAu * bias_alphas[userId]);
+                
+                // update the day specific user bias value
+                Bu_t[userId][(int)date] += 
+                    learningRateBut * (point_error - regularizerBut * Bu_t[userId][(int)date]);
+
+                // update the c_u value
+                c_u[userId] += 
+                    learningRateCu * (point_error * (old_movie_val + old_bin_val) - regularizerCu * (c_u[userId] - 1));
+
+                // update the time sensitive c value
+                c_ut[userId][(int)date] +=
+                     learningRateCut * (point_error * (old_movie_val + old_bin_val) - regularizerCut * c_ut[userId][(int)date]);
+                
             }
             // update the pt_index to the next point
             pt_index++;
@@ -472,7 +616,6 @@ inline void run_epoch()
     train();
     // decrease gammas by 10%, as suggested in paper
     GAMMA_2 = DECAY * GAMMA_2;
-    GAMMA_1 = DECAY * GAMMA_1;
     GAMMA_A = DECAY_A * GAMMA_A;
 }
 
@@ -502,8 +645,7 @@ inline void findQualPredictions()
         	date = ratings[i * POINT_SIZE + 2];
             // I have to add the ratings in the file because this ratings file
             // has the baselines removed
-            prediction = 
-            	baselinePrediction(user, movie, date) + predict_rating(user, movie, date);
+            prediction = predict_rating(user, movie, date);
             if (prediction < 1)
             {
                 prediction = 1;
@@ -530,6 +672,7 @@ int main()
 {
     initialize();
     read_data();
+    init_time_bias();
     double initialError = 10000;
     double finalError = error(2);
     int counter = 1;
