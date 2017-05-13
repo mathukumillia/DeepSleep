@@ -10,13 +10,14 @@
 // a point looks like (user, movie, date, rating)
 #define POINT_SIZE 4 // the size of a single input point in the training data
 #define STOPPING_CONDITION 0
-#define MAX_EPOCHS 30 // the maximum number of epochs to run; 30 in the paper
+#define MAX_EPOCHS 40 // the maximum number of epochs to run; 30 in the paper
 #define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
 #define LAMBDA_7 0.015 // obtained from the SVD++ paper
 #define LAMBDA_6 0.005 // from SVD++ paper
-#define LAMBDA_A 0.0004 // from the timeSVD++ repo online
-#define BETA 0.04 // from timeSVD++ paper
-#define DECAY 0.975 // from paper
+#define LAMBDA_A 50 // from belkor paper 
+#define BETA 0.4 // from timeSVD++ paper
+#define DECAY 0.9 
+#define DECAY_A 0.9
 
 using namespace std;
 
@@ -30,10 +31,12 @@ const double num_pts = 102416306;
 // K is the constant representing the number of features
 // gamma_2 is the step size
 const double K = 50;
-double GAMMA_2 = 0.007;
-double GAMMA_1 = 0.007;
+double GAMMA_2 = 0.008;
+double GAMMA_1 = 0.008;
 // alpha step size; got default from timeSVD++ repo online
 double GAMMA_A = 0.00001;
+// the mean rating with the baselines removed in point set 1
+const double baseline_removed_mean = 0.00199931;
 
 // though these are declared as single dimensional, I will use them as 2D arrays
 // to facilitate this, I will store the sizes of the arrays as well
@@ -66,14 +69,20 @@ int y_size = (int) ((num_movies + 1) * K);
 // is one indexed
 double * t_u;
 
-// 1D array that stores the alpha value for each user 
+// 2D array that stores the alpha value for each user factor
 double * alphas;
+int alphas_size = (int) ((num_users + 1) * K);
 
 // list of maps that help store the dev results to make the function run faster
 vector< map<int, double> > dev_results;
 
 // boolean to enable debugging messages 
 bool DEBUG = false;
+
+
+// the basic user and movie bias arrays
+double * user_biases;
+double * movie_biases;
 
 /*
 * Allocates memory and initializes user, movie, ratings, and indices arrays
@@ -107,13 +116,31 @@ inline void initialize()
     neighborhood_sizes = new double[(int)(num_users + 1)];
 
     t_u = new double[(int)num_users + 1];
-    alphas = new double[(int)num_users + 1]();
+    alphas = new double[alphas_size]();
+
+    for (int i = 0; i < alphas_size; i++)
+    {
+        alphas[i] =  0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);
+    }
 
     // allocate the dev results and initialize all of the values to 0
     for (int i = 0; i < num_users + 1; i++)
     {
         map<int,double> tmp;
         dev_results.push_back(tmp);
+    }
+
+    // initialize the user and movie biases
+    user_biases = new double[(int)num_users + 1];
+    for (int i = 0; i < num_users + 1; i++)
+    {
+        user_biases[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);
+    }
+
+    movie_biases = new double[(int)num_movies + 1];
+    for (int i = 0; i < num_movies + 1; i++)
+    {
+        movie_biases[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K); 
     }
 
     cout << "Done allocating memory.\n";
@@ -242,7 +269,7 @@ inline double predict_rating(int user, int movie, double date)
 	{
         // add the fixed user values and the time values to the user_vector 
 		user_vector[i] = 
-            user_values[user * (int)K + i] + alphas[user] * dev(user, date) + user_vector[i];
+            user_values[user * (int)K + i] + alphas[user * (int)K + i] * dev(user, date) + user_vector[i];
 	}
 
 	// compute the rating as a fu
@@ -251,6 +278,13 @@ inline double predict_rating(int user, int movie, double date)
     {
         rating += user_vector[i] * movie_values[movie * (int)K + i];
     }
+
+    // add in the user and movie biases
+    rating += user_biases[user];
+    rating += movie_biases[movie];
+
+    // add in the mean
+    rating += baseline_removed_mean;
 
     delete [] user_vector;
     return rating;
@@ -265,11 +299,7 @@ inline double predict_rating(int user, int movie, double date, double * y_sum)
     for (int i = 0; i < K; i++)
     {
         user_vector[i] = 
-            user_values[user * (int)K + i] + alphas[user] * dev(user, date) + y_sum[i];
-    }
-    if(DEBUG)
-    {
-        cout << "user_values update after alpha: " << alphas[user] << "\n";
+            user_values[user * (int)K + i] + alphas[user * (int)K + i] * dev(user, date) + y_sum[i];
     }
 	// compute the rating
 	double rating = 0;
@@ -278,10 +308,12 @@ inline double predict_rating(int user, int movie, double date, double * y_sum)
         rating += user_vector[i] * movie_values[movie * (int)K + i];
     }
 
-    if(DEBUG)
-    {
-        cout << "Predicted rating: " << rating << "\n";
-    }
+    // add in the user and movie biases
+    rating += user_biases[user];
+    rating += movie_biases[movie];
+
+    // add in the mean
+    rating += baseline_removed_mean;
 
     return rating;
 }
@@ -343,6 +375,7 @@ inline void train()
     double alpha_factor;
     // neighborhood size
     double size; 
+    double dev_val;
 
     // iterates through the users
     for (userId = 1; userId < num_users; userId++)
@@ -366,32 +399,18 @@ inline void train()
                 itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
                 date = ratings[pt_index * POINT_SIZE + 2];
                 rating = ratings[pt_index * POINT_SIZE + 3];
+                dev_val = dev(userId, date);
                 // get the point error
                 point_error = rating - predict_rating(userId, itemId, date, y_sum_im);
-                // update the alpha factor for this user
-                alpha_factor = alphas[userId];
-                if(pt_index <= 10)
-                    DEBUG = true; 
-                else
-                    DEBUG = false;
-                if (DEBUG){
-                    cout << "alpha factor to start: " << alpha_factor << "\n";
-                    cout << "point error: " << point_error << "\n";
-                    cout << "dev value: " << dev(userId, date) << "\n";
-                }
-
-                alphas[userId] += 
-                    GAMMA_A * (point_error * dev(userId, date) - LAMBDA_A * alpha_factor); 
-                if(DEBUG)
-                    cout << "alpha factor post update: " << alphas[userId] << "\n";
                 for (i = 0; i < K; i++)
                 {
-                    // update the movie and user factors 
+                    // update the movie, user, and alpha factors 
                     movie_factor = movie_values[itemId * (int)K + i];
                     user_factor = user_values[userId * (int)K + i];
+                    alpha_factor = alphas[userId * (int)K + i];
 
                     movie_values[itemId * (int)K + i] += 
-                        GAMMA_2 * (point_error * (user_factor + y_sum_im[i]) - LAMBDA_7 * movie_factor);
+                        GAMMA_2 * (point_error * (user_factor + alpha_factor * dev_val + y_sum_im[i]) - LAMBDA_7 * movie_factor);
                     user_values[userId * (int)K + i] +=
                         GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
 
@@ -400,8 +419,30 @@ inline void train()
                     {
                         y_sum_im[i] += 
                             GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_sum_im[i]);
-                    }           
+                    }   
+
+                    // update the alpha factor for this user
+                    // if(pt_index <= 1)
+                    //     DEBUG = true; 
+                    // else
+                    //     DEBUG = false;
+                    // if (DEBUG){
+                        // cout << "alpha factor to start: " << alphas[userId * (int)K + i] << "\n";
+                        // cout << "point error: " << point_error << "\n";
+                        // cout << "dev value: " << dev_val << "\n";
+                    // }
+
+                    alphas[userId * (int)K + i] += 
+                        GAMMA_A * (point_error * (movie_factor * dev_val) - LAMBDA_A * alpha_factor); 
+                    // if(DEBUG){
+                    //     cout << "movie factor used in alpha update: " << movie_factor << "\n";
+                    //     cout << "alpha factor post update: " << alphas[userId * (int)K + i] << "\n";
+                    // }
+
                 }
+                // update the user and movie biases
+                user_biases[userId] += GAMMA_1 * (point_error - LAMBDA_6 * user_biases[userId]);
+                movie_biases[itemId] += GAMMA_1 * (point_error - LAMBDA_6 * movie_biases[itemId]);
             }
             // update the pt_index to the next point
             pt_index++;
@@ -432,7 +473,7 @@ inline void run_epoch()
     // decrease gammas by 10%, as suggested in paper
     GAMMA_2 = DECAY * GAMMA_2;
     GAMMA_1 = DECAY * GAMMA_1;
-    GAMMA_A = DECAY + GAMMA_A;
+    GAMMA_A = DECAY_A * GAMMA_A;
 }
 
 /*
@@ -489,15 +530,17 @@ int main()
 {
     initialize();
     read_data();
-    double finalError;
+    double initialError = 10000;
+    double finalError = error(2);
     int counter = 1;
 
     cout << "The starting error is: " << finalError << "\n";
-    while (counter <= MAX_EPOCHS) {
+    while (initialError - finalError > STOPPING_CONDITION && counter <= MAX_EPOCHS) {
         cout << "Starting Epoch " << counter << "\n";
         run_epoch();
         if (counter % 1 == 0)
         {
+            initialError = finalError;
             finalError = error(2);
             cout << "Error after " << counter << " epochs: " << finalError << "\n";
         }
