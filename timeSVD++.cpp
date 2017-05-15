@@ -13,11 +13,11 @@
 #define STOPPING_CONDITION 0
 #define MAX_EPOCHS 40 // the maximum number of epochs to run; 30 in the paper
 #define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
-#define LAMBDA_7 0.01 // obtained from the SVD++ paper
+#define LAMBDA_7 0.0015 // from belkor paper
 #define LAMBDA_A 50 // from belkor paper 
 #define LABMDA_pukt 0.01 // from bellkor paper
 #define BETA 0.4 // from timeSVD++ paper
-#define DECAY 0.95 
+#define DECAY 0.9 // from belkor paper 
 #define VAL_SET 3 // the point set being used for validation
 
 using namespace std;
@@ -618,7 +618,7 @@ inline void train()
                     if(size != 0)
                     {
                         y_sum_im[i] += 
-                            GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_sum_im[i]);
+                            GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * y_sum_im[i]);
                     }   
                     alphas[userId * (int)K + i] += 
                         GAMMA_A * (point_error * (movie_factor * dev_val) - LAMBDA_A * alpha_factor); 
@@ -672,7 +672,7 @@ inline void train()
             itemId = neighborhoods[userId * MAX_NEIGHBOR_SIZE + i];
             for (int j = 0; j < K; j++)
             {
-                y[itemId * (int)K + j] += y_sum_im[j] - y_sum_old[j];
+                y[itemId * (int)K + j] += (y_sum_im[j] - y_sum_old[j])/sqrt(size);
             }
         }
     }
