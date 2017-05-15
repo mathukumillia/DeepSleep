@@ -13,11 +13,12 @@
 #define STOPPING_CONDITION 0
 #define MAX_EPOCHS 40 // the maximum number of epochs to run; 30 in the paper
 #define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
-#define LAMBDA_7 0.015 // obtained from the SVD++ paper
+#define LAMBDA_7 0.01 // obtained from the SVD++ paper
 #define LAMBDA_A 50 // from belkor paper 
+#define LABMDA_pukt 0.01 // from bellkor paper
 #define BETA 0.4 // from timeSVD++ paper
-#define DECAY 0.9 
-#define DECAY_A 0.9
+#define DECAY 0.95 
+#define VAL_SET 3 // the point set being used for validation
 
 using namespace std;
 
@@ -34,6 +35,8 @@ const double num_pts = 102416306;
 // gamma_2 is the step size         
 const double K = 50;
 double GAMMA_2 = 0.008;
+// 
+double GAMMA_pukt = 0.004;
 // alpha step size; got default from timeSVD++ repo online
 double GAMMA_A = 0.00001;
 
@@ -78,9 +81,14 @@ vector< map<int, double> > dev_results;
 // boolean to enable debugging messages 
 bool DEBUG = false;
 
+// store the day specific time dependent user SVD terms
+// the first vector is indexed by user(1 indexed)
+// the second layer is indexed by factor number (0 indexed)
+// each element of the map maps a date to a bias term
+// vector<vector<map<int, double> > > p_ukt;
+
 /*
 * Global variables for baseline prediction
-*   Most of the code for this part came from kenny's code
 */
 
 // the mean rating in point set 1
@@ -164,7 +172,7 @@ inline void initialize()
     for (int i = 0; i < movie_values_size; i++)
     {
         movie_values[i] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);
-        y[i] = 0.0; // this was an arbitrary initial condition
+        y[i] = 0; // this was an arbitrary initial condition
     }
 
     // create  the arrays that store the ratings input data and the indexes
@@ -179,7 +187,7 @@ inline void initialize()
 
     for (int i = 0; i < alphas_size; i++)
     {
-        alphas[i] =  0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);
+        alphas[i] = 0;
     }
 
     // initialize the naive user biases
@@ -284,23 +292,35 @@ inline void read_data()
 */
 inline void init_time_bias()
 {
-    cout << "Initializing Bu_t and c_ut.\n";
+    cout << "Initializing Bu_t, c_ut, and p_ukt.\n";
     // create the map for each user
     for (int i = 0; i < num_users + 1; i++)
     {
         // insert maps into Bu_t
         map<int, double> tmp;
         Bu_t.push_back(tmp);
+       
         // insert maps into c_ut
         map<int, double> tmp2;
         c_ut.push_back(tmp2);
+
+        // initialize p_ukt by inserting vectors of maps into it into it
+        // each vector signifies a single user's factor profile
+        // vector<map<int, double> > tmp3;
+        // // insert the date maps for each factor into each vector
+        // for (int j = 0; j < K; j++)
+        // {
+        //     map<int, double> tmp4;
+        //     tmp3.push_back(tmp4);
+        // }
+        // p_ukt.push_back(tmp3);
     }
     int user;
     int date; 
     // loop through training (set 1) data and insert into the map as needed
     for (int i = 0; i < num_pts; i++)
     {
-        if(indices[i] == 1)
+        if(indices[i] == 1 || indices[i] == 2)
         {
             user = (int)ratings[i * POINT_SIZE];
             date = (int)ratings[i * POINT_SIZE + 2];
@@ -308,12 +328,21 @@ inline void init_time_bias()
             // initialize the pair
             if (Bu_t[user].count(date) == 0)
             {
-                Bu_t[user][date] = 0.0000001;
+                Bu_t[user][date] = 0;
             }
             if (c_ut[user].count(date) == 0)
             {
-                c_ut[user][date] = 0.0000001;
+                c_ut[user][date] = 0;
             }
+            // loop through each K and check if the corresponding user, K 
+            // pair has a certain bias value for this date
+            // for (int j = 0; j < K; j++)
+            // {
+            //     if(p_ukt[user][j].count(date) == 0)
+            //     {
+            //         p_ukt[user][j][date] = 0.1 * (rand() / (RAND_MAX + 1.0)) / sqrt(K);
+            //     }
+            // }
         }
     }
 }
@@ -403,10 +432,30 @@ inline double predict_rating(int user, int movie, double date)
     }
 
     // add in the user biases
-    rating += user_biases[user] + bias_alphas[user] * dev(user, date) + Bu_t[user][(int)date];
+    // if Bu_t has not been initialized for this date, we set it to zero
+    double bu_value;
+    if (Bu_t[user].count(date) == 0)
+    {
+        bu_value = 0;
+    }
+    else
+    {
+        bu_value = Bu_t[user][(int)date];
+    }
+    rating += user_biases[user] + bias_alphas[user] * dev(user, date) + bu_value;
 
     // add in the movie biases multiplied by the scaling factors
-    rating += (movie_biases[movie] + Bi_bin[movie][(int)date/binsize]) * (c_u[user] + c_ut[user][(int)date]);
+    // if c_ut has not been initialized for this date, we set it to zero
+    double cu_value;
+    if (c_ut[user].count(date) == 0)
+    {
+        cu_value = 0;
+    }
+    else
+    {
+        cu_value = c_ut[user][(int)date];
+    }
+    rating += (movie_biases[movie] + Bi_bin[movie][(int)date/binsize]) * (c_u[user] + cu_value);
 
     // add in the overall mean
     rating += mean_rating;
@@ -434,10 +483,30 @@ inline double predict_rating(int user, int movie, double date, double * y_sum)
     }
 
     // add in the user biases
-    rating += user_biases[user] + bias_alphas[user] * dev(user, date) + Bu_t[user][(int)date];
+    // if Bu_t has not been initialized for this date, we set it to zero
+    double bu_value;
+    if (Bu_t[user].count(date) == 0)
+    {
+        bu_value = 0;
+    }
+    else
+    {
+        bu_value = Bu_t[user][(int)date];
+    }
+    rating += user_biases[user] + bias_alphas[user] * dev(user, date) + bu_value;
 
     // add in the movie biases multiplied by the scaling factors
-    rating += (movie_biases[movie] + Bi_bin[movie][(int)date/binsize]) * (c_u[user] + c_ut[user][(int)date]);
+    // if c_ut has not been initialized for this date, we set it to zero
+    double cu_value;
+    if (c_ut[user].count(date) == 0)
+    {
+        cu_value = 0;
+    }
+    else
+    {
+        cu_value = c_ut[user][(int)date];
+    }
+    rating += (movie_biases[movie] + Bi_bin[movie][(int)date/binsize]) * (c_u[user] + cu_value);
 
     // add in the overall mean
     rating += mean_rating;
@@ -523,7 +592,7 @@ inline void train()
         while (ratings[pt_index * POINT_SIZE] == userId)
         {
             // only train if this is in the training set 
-            if (indices[pt_index] == 1)
+            if (indices[pt_index] == 1 || indices[pt_index] == 2)
             {
                 // store some things to make referring to them easier
                 itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
@@ -553,6 +622,10 @@ inline void train()
                     }   
                     alphas[userId * (int)K + i] += 
                         GAMMA_A * (point_error * (movie_factor * dev_val) - LAMBDA_A * alpha_factor); 
+
+                    // update the p_ukt factors - these are the daily effects factors for SVD
+                    // p_ukt[userId][i][(int)date] += 
+                    //     GAMMA_pukt * (point_error * movie_factor - LABMDA_pukt * p_ukt[userId][i][(int)date]);
                 }
 
                 /*
@@ -616,7 +689,8 @@ inline void run_epoch()
     train();
     // decrease gammas by 10%, as suggested in paper
     GAMMA_2 = DECAY * GAMMA_2;
-    GAMMA_A = DECAY_A * GAMMA_A;
+    GAMMA_pukt = DECAY * GAMMA_pukt;
+    GAMMA_A = DECAY * GAMMA_A;
 }
 
 /*
@@ -674,7 +748,7 @@ int main()
     read_data();
     init_time_bias();
     double initialError = 10000;
-    double finalError = error(2);
+    double finalError = error(VAL_SET);
     int counter = 1;
 
     cout << "The starting error is: " << finalError << "\n";
@@ -684,7 +758,7 @@ int main()
         if (counter % 1 == 0)
         {
             initialError = finalError;
-            finalError = error(2);
+            finalError = error(VAL_SET);
             cout << "Error after " << counter << " epochs: " << finalError << "\n";
         }
         counter++;
