@@ -13,12 +13,12 @@
 #define STOPPING_CONDITION 0
 #define MAX_EPOCHS 40 // the maximum number of epochs to run; 30 in the paper
 #define MAX_NEIGHBOR_SIZE 300 // obtained from SVD++ paper
-#define LAMBDA_7 0.0015 // from belkor paper
+#define LAMBDA_7 0.0205 // tuned
 #define LAMBDA_A 50 // from belkor paper 
 #define LABMDA_pukt 0.01 // from bellkor paper
 #define BETA 0.4 // from timeSVD++ paper
 #define DECAY 0.9 // from belkor paper 
-#define VAL_SET 3 // the point set being used for validation
+#define VAL_SET 4 // the point set being used for validation
 
 using namespace std;
 
@@ -33,7 +33,7 @@ const double num_pts = 102416306;
 
 // K is the constant representing the number of features
 // gamma_2 is the step size         
-const double K = 50;
+const double K = 100;
 double GAMMA_2 = 0.008;
 // 
 double GAMMA_pukt = 0.004;
@@ -271,12 +271,12 @@ inline void read_data()
     indices_file.close();
 
     // read in neighborhod data
-    fstream neighborhood_file("../neighborhoods.bin", ios::in | ios::binary);
+    fstream neighborhood_file("../neighborhoods_123.bin", ios::in | ios::binary);
     neighborhood_file.read(reinterpret_cast<char *>(neighborhoods), sizeof(int) * (num_users + 1) * MAX_NEIGHBOR_SIZE);
     neighborhood_file.close();
 
     // read in the neighborhood size data
-    fstream nsize_file ("../neighborhood_sizes.bin", ios::in | ios::binary);
+    fstream nsize_file ("../neighborhood_sizes_123.bin", ios::in | ios::binary);
     nsize_file.read(reinterpret_cast<char *>(neighborhood_sizes), sizeof(double) * (num_users + 1));
     nsize_file.close();
 
@@ -317,10 +317,10 @@ inline void init_time_bias()
     }
     int user;
     int date; 
-    // loop through training (set 1) data and insert into the map as needed
+    // loop through training (set 1, 2, 3, and 4) data and insert into the map as needed
     for (int i = 0; i < num_pts; i++)
     {
-        if(indices[i] == 1 || indices[i] == 2)
+        if(indices[i] == 1 || indices[i] == 2 || indices[i] == 3 || indices[i] == 4)
         {
             user = (int)ratings[i * POINT_SIZE];
             date = (int)ratings[i * POINT_SIZE + 2];
@@ -553,10 +553,11 @@ inline double error (int set)
 * Trains the SVD++ model on one provided point
 * Point must contain the user, movie, date, and rating
 * also takes in y_sum, which just contains the sum of the y's in the 
-* neighborhood 
+* neighborhood. Also takes in a train_probe boolean value that tells 
+* the function if we are training on probe data or not
 * utilizes SGD
 */
-inline void train()
+inline void train(int train_probe)
 {
     int userId, itemId, currentUser, i;
     double date;
@@ -576,7 +577,7 @@ inline void train()
     double old_movie_val;
 
     // iterates through the users
-    for (userId = 1; userId < num_users; userId++)
+    for (userId = 1; userId <= num_users; userId++)
     {
         // get the neighborhood size for this user
         size = neighborhood_sizes[userId];
@@ -591,8 +592,8 @@ inline void train()
         // this goes through all the training samples associated with a user
         while (ratings[pt_index * POINT_SIZE] == userId)
         {
-            // only train if this is in the training set 
-            if (indices[pt_index] == 1 || indices[pt_index] == 2)
+            // only train if this is in the set we want to train on
+            if ((train_probe == 0 && indices[pt_index] < 4) || (train_probe == 1 && indices[pt_index] <= 4))
             {
                 // store some things to make referring to them easier
                 itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
@@ -686,7 +687,8 @@ inline void train()
 inline void run_epoch()
 {
     cout << "Running an epoch.\n";
-    train();
+    // train not including the probe set
+    train(0);
     // decrease gammas by 10%, as suggested in paper
     GAMMA_2 = DECAY * GAMMA_2;
     GAMMA_pukt = DECAY * GAMMA_pukt;
@@ -742,6 +744,48 @@ inline void findQualPredictions()
     probeFile.close();
 }
 
+void writeMatrices()
+{
+    cout << "Writing matrices.\n";
+    // write the user matrix to a file
+    ofstream user_file ("../user_matrix.txt");
+    // loop through each user 
+    if (user_file.is_open())
+    {
+        cout << "Writing user matrix.\n";
+        for (int user = 1; user <= num_users; user++)
+        {
+            // loop through and write each of the users factors
+            for (int factor = 0; factor < K; factor++)
+            {
+                user_file << user_values[user * (int)K + factor] << ", ";
+            }
+            // print a new line
+            user_file << "\n";
+        }
+        user_file.close();
+    }
+
+    // write the movie matrix to a file
+    ofstream movie_file ("../movie_matrix.txt");
+    // loop through each movie 
+    if (movie_file.is_open())
+    {
+        cout << "Writing movie matrix.\n";
+        for (int movie = 1; movie <= num_movies; movie++)
+        {
+            // loop through and write each of the movie factors
+            for (int factor = 0; factor < K; factor++)
+            {
+                movie_file << movie_values[movie * (int)K + factor] << ", ";
+            }
+            // print a new line
+            movie_file << "\n";
+        }
+        movie_file.close();
+    }
+}
+
 int main()
 {
     initialize();
@@ -763,10 +807,43 @@ int main()
         }
         counter++;
     }
-    cout << "Final validation error: " << finalError << "\n";
+    cout << "Final validation error before probe training: " << finalError << "\n";
+
+    // read in neighborhod data with probe 
+    fstream neighborhood_file("../neighborhoods_1234.bin", ios::in | ios::binary);
+    neighborhood_file.read(reinterpret_cast<char *>(neighborhoods), sizeof(int) * (num_users + 1) * MAX_NEIGHBOR_SIZE);
+    neighborhood_file.close();
+
+    // read in the neighborhood size data with probe
+    fstream nsize_file ("../neighborhood_sizes_1234.bin", ios::in | ios::binary);
+    nsize_file.read(reinterpret_cast<char *>(neighborhood_sizes), sizeof(double) * (num_users + 1));
+    nsize_file.close();
+
+    // reset learning rates
+    GAMMA_2 = 0.008;
+    GAMMA_pukt = 0.004;
+    // alpha step size; got default from timeSVD++ repo online
+    GAMMA_A = 0.00001;
+
+    cout << "Beginning probe training: \n";
+    // run 15 epochs of probe data training
+    for (int i = 0; i < counter; i++)
+    {
+        cout << "Probe epoch " << i << "\n";
+        // train with the probe set
+        train(1);
+        // decrease gammas by 10%, as suggested in paper
+        GAMMA_2 = DECAY * GAMMA_2;
+        GAMMA_pukt = DECAY * GAMMA_pukt;
+        GAMMA_A = DECAY * GAMMA_A;
+    }
+
+    // write the resulting matrices to files
+    writeMatrices();
 
     // find the values on the qual set
     findQualPredictions();
+
 
     clean_up();
     return 0;

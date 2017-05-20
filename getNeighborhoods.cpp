@@ -82,9 +82,9 @@ void assemble_neighborhoods()
 	for (int i = 0; i < num_pts; i++)
 	{
 		index = indices[i];
-		// currently only assembles neighborhoods from the training set 1
+		// currently only assembles neighborhoods from a provided set
 		// limit the size of the neighborhood to 300, just like the paper does
-		if (index == 1)
+		if (index == 1 || index == 2 || index == 3 || index == 4 || index == 5)
 		{
 			user = ratings[i * POINT_SIZE];
 			movie = ratings[i * POINT_SIZE + 1];
@@ -104,8 +104,8 @@ void assemble_neighborhoods()
 void write_neighborhoods()
 {
 	cout << "Writing to binary.\n";
-	fstream neighborhoods_file ("neighborhoods.bin", ios::out | ios::binary);
-	fstream neighborhood_sizes_file ("neighborhood_sizes.bin", ios::out | ios::binary);
+	fstream neighborhoods_file ("neighborhoods_12345.bin", ios::out | ios::binary);
+	fstream neighborhood_sizes_file ("neighborhood_sizes_12345.bin", ios::out | ios::binary);
 	neighborhoods_file.write(reinterpret_cast<char *>(neighborhoods), sizeof(double) * (num_users + 1) * MAX_NEIGHBOR_SIZE);
 	neighborhood_sizes_file.write(reinterpret_cast<char *>(neighborhood_sizes), sizeof(double) * (num_users + 1));
 	neighborhoods_file.close();
