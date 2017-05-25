@@ -7,6 +7,7 @@
 #include <vector>
 #include <stdlib.h>
 #include <algorithm>
+#include <pthread.h>
 
 // a point looks like (user, movie, date, rating)
 #define POINT_SIZE 4 // the size of a single input point in the training data
@@ -201,7 +202,6 @@ inline void initialize()
     {
         map<int,double> tmp;
         dev_results.push_back(tmp); 
-        // initialize the naive user biases 
         user_biases[i] = 0.0;
         bias_alphas[i] = 0.0;
         c_u[i] = 1.0;
@@ -547,6 +547,30 @@ inline double error (int set)
 }
 
 /*
+* Updates the y values for a given user and movie combination, along with the
+* point error 
+*/
+inline void update_y_values(int userId, int itemId, double point_error)
+{
+    int size = neighborhood_sizes[userId];
+    int y_factor;
+    int movie_factor;
+    int neighborId;
+
+    for (int j = 0; j < size; j++)
+    {
+        // the movie neighbor
+        neighborId = neighborhoods[userId * MAX_NEIGHBOR_SIZE + j];
+        for (int k = 0; k < K; k++)
+        {
+            movie_factor = movie_values[itemId * (int)K + k];
+            y_factor = y[neighborId * (int)K + k];
+            y[neighborId * (int)K + k] += GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
+        }
+    }    
+}
+
+/*
 * Trains the SVD++ model on one provided point
 * Point must contain the user, movie, date, and rating
 * also takes in y_sum, which just contains the sum of the y's in the 
@@ -559,9 +583,7 @@ inline void train(int train_probe)
     int userId, itemId, currentUser, i;
     double date;
     double rating;
-    int pt_index = 0;
     double * y_sum = new double[(int)K]();
-    double user_vector[(int)K] = {};
     double point_error;
     double movie_factor;
     double user_factor;
@@ -575,110 +597,87 @@ inline void train(int train_probe)
     int neighborId;
 
     // iterates through the users
-    for (userId = 1; userId <= num_users; userId++)
+    for (int pt_index = 0; pt_index < num_pts; pt_index++)
     {
-        // get the neighborhood size for this user
-        size = neighborhood_sizes[userId];
-
-        // this goes through all the training samples associated with a user
-        while (ratings[pt_index * POINT_SIZE] == userId)
+        // only train if this is in the set we want to train on
+        if ((train_probe == 0 && indices[pt_index] < 4) || (train_probe == 1 && indices[pt_index] <= 4))
         {
-            // only train if this is in the set we want to train on
-            if ((train_probe == 0 && indices[pt_index] < 4) || (train_probe == 1 && indices[pt_index] <= 4))
+            // store some things to make referring to them easier
+            userId = (int)ratings[pt_index * POINT_SIZE];
+            // get the neighborhood size for this user
+            size = neighborhood_sizes[userId];
+            itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
+            date = ratings[pt_index * POINT_SIZE + 2];
+            rating = ratings[pt_index * POINT_SIZE + 3];
+            dev_val = dev(userId, date);
+
+            // get the sum of y vectors
+            get_y_sum(userId, y_sum);
+
+            // get the point error
+            point_error = rating - predict_rating(userId, itemId, date, y_sum);
+
+            // update all of the SVD factors including, p, q, and alpha
+            for (i = 0; i < K; i++)
             {
-                // store some things to make referring to them easier
-                itemId = (int)ratings[pt_index * POINT_SIZE + 1]; 
-                date = ratings[pt_index * POINT_SIZE + 2];
-                rating = ratings[pt_index * POINT_SIZE + 3];
-                dev_val = dev(userId, date);
+                // update the movie, user, and alpha factors 
+                movie_factor = movie_values[itemId * (int)K + i];
+                user_factor = user_values[userId * (int)K + i];
+                alpha_factor = alphas[userId * (int)K + i];
 
-                // get the point error
-                point_error = rating - predict_rating(userId, itemId, date, y_sum);
+                movie_values[itemId * (int)K + i] += 
+                    GAMMA_2 * (point_error * (user_factor + alpha_factor * dev_val + y_sum[i]) - LAMBDA_7 * movie_factor);
+                user_values[userId * (int)K + i] +=
+                    GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
 
-                // update all of the SVD factors including, p, q, and alpha
-                for (i = 0; i < K; i++)
-                {
-                    // update the movie, user, and alpha factors 
-                    movie_factor = movie_values[itemId * (int)K + i];
-                    user_factor = user_values[userId * (int)K + i];
-                    alpha_factor = alphas[userId * (int)K + i];
+                alphas[userId * (int)K + i] += 
+                    GAMMA_A * (point_error * (movie_factor * dev_val) - LAMBDA_A * alpha_factor); 
 
-                    movie_values[itemId * (int)K + i] += 
-                        GAMMA_2 * (point_error * (user_factor + alpha_factor * dev_val + y_sum[i]) - LAMBDA_7 * movie_factor);
-                    user_values[userId * (int)K + i] +=
-                        GAMMA_2 * (point_error * movie_factor - LAMBDA_7 * user_factor);
-
-                    alphas[userId * (int)K + i] += 
-                        GAMMA_A * (point_error * (movie_factor * dev_val) - LAMBDA_A * alpha_factor); 
-
-                    // update the p_ukt factors - these are the daily effects factors for SVD
-                    // p_ukt[userId][i][(int)date] += 
-                    //     GAMMA_pukt * (point_error * movie_factor - LABMDA_pukt * p_ukt[userId][i][(int)date]);
-                }
-
-
-                // get the sum of neighborhood vectors for this user
-                // clear the provided vector
-                for (i = 0; i < K; i++)
-                {
-                    y_sum[i] = 0;
-                }
-
-                // update the y_values 
-                for (int j = 0; j < size; j++)
-                {
-                    cout << size << "\n";
-                    // the movie neighbor
-                    neighborId = neighborhoods[userId * MAX_NEIGHBOR_SIZE + j];
-                    for (int k = 0; k < K; k++)
-                    {
-                        movie_factor = movie_values[itemId * (int)K + k];
-                        y_factor = y[neighborId * (int)K + k];
-                        y[neighborId * (int)K + k] += GAMMA_2 * (point_error/sqrt(size) * movie_factor - LAMBDA_7 * y_factor);
-
-                        y_sum[k] += y[neighborId * (int)K + k]/sqrt(size);
-                    }
-                }
-
-                /*
-                * These next few lines update the baseline metrics
-                *
-                */
-                // update the naive user biases
-                user_biases[userId] += learningRateBu * (point_error - regularizerBu * user_biases[userId]);
-
-                // update the naive movie biases
-                old_movie_val = movie_biases[itemId];
-                movie_biases[itemId] += learningRateBi * (point_error - regularizerBi * old_movie_val);
-
-                // update the movie time bin bias term
-                old_bin_val =  Bi_bin[itemId][(int)date/binsize];
-                Bi_bin[itemId][(int)date/binsize] += 
-                    learningRateBiBin * (point_error - regularizerBiBin * old_bin_val);
-                
-                // update the user bias alphas
-                bias_alphas[userId] += 
-                    learningRateAu * (point_error * dev_val - regularizerAu * bias_alphas[userId]);
-                
-                // update the day specific user bias value
-                Bu_t[userId][(int)date] += 
-                    learningRateBut * (point_error - regularizerBut * Bu_t[userId][(int)date]);
-
-                // update the c_u value
-                c_u[userId] += 
-                    learningRateCu * (point_error * (old_movie_val + old_bin_val) - regularizerCu * (c_u[userId] - 1));
-
-                // update the time sensitive c value
-                c_ut[userId][(int)date] +=
-                     learningRateCut * (point_error * (old_movie_val + old_bin_val) - regularizerCut * c_ut[userId][(int)date]);
-                
+                // update the p_ukt factors - these are the daily effects factors for SVD
+                // p_ukt[userId][i][(int)date] += 
+                //     GAMMA_pukt * (point_error * movie_factor - LABMDA_pukt * p_ukt[userId][i][(int)date]);
             }
-            // update the pt_index to the next point
-            pt_index++;
-            if (pt_index % 1000000 == 0)
-            {
-                cout << pt_index << "\n";
-            }
+
+
+            // update the y_values 
+            update_y_values(userId, itemId, point_error);
+
+            /*
+            * These next few lines update the baseline metrics
+            *
+            */
+            // update the naive user biases
+            user_biases[userId] += learningRateBu * (point_error - regularizerBu * user_biases[userId]);
+
+            // update the naive movie biases
+            old_movie_val = movie_biases[itemId];
+            movie_biases[itemId] += learningRateBi * (point_error - regularizerBi * old_movie_val);
+
+            // update the movie time bin bias term
+            old_bin_val =  Bi_bin[itemId][(int)date/binsize];
+            Bi_bin[itemId][(int)date/binsize] += 
+                learningRateBiBin * (point_error - regularizerBiBin * old_bin_val);
+            
+            // update the user bias alphas
+            bias_alphas[userId] += 
+                learningRateAu * (point_error * dev_val - regularizerAu * bias_alphas[userId]);
+            
+            // update the day specific user bias value
+            Bu_t[userId][(int)date] += 
+                learningRateBut * (point_error - regularizerBut * Bu_t[userId][(int)date]);
+
+            // update the c_u value
+            c_u[userId] += 
+                learningRateCu * (point_error * (old_movie_val + old_bin_val) - regularizerCu * (c_u[userId] - 1));
+
+            // update the time sensitive c value
+            c_ut[userId][(int)date] +=
+                 learningRateCut * (point_error * (old_movie_val + old_bin_val) - regularizerCut * c_ut[userId][(int)date]);
+            
+        }
+        if (pt_index % 1000000 == 0)
+        {
+            cout << pt_index << "\n";
         }
     }
     delete [] y_sum;
